@@ -26,14 +26,14 @@ enum AccentAttribute: DecodableAttributedStringKey, MarkdownDecodableAttributedS
 }
 
 extension AttributeScopes {
-    struct AskCustom: AttributeScope {
+    struct SolasCustom: AttributeScope {
         let accent: AccentAttribute
     }
-    var ask: AskCustom.Type { AskCustom.self }
+    var solas: SolasCustom.Type { SolasCustom.self }
 }
 
 extension AttributeDynamicLookup {
-    subscript<T: AttributedStringKey>(dynamicMember keyPath: KeyPath<AttributeScopes.AskCustom, T>) -> T {
+    subscript<T: AttributedStringKey>(dynamicMember keyPath: KeyPath<AttributeScopes.SolasCustom, T>) -> T {
         self[T.self]
     }
 }
@@ -165,7 +165,7 @@ enum AnswerParser {
     // MARK: - Inline parsing (Foundation Markdown, custom accent included)
 
     static func parseInline(_ s: String) -> AttributedString {
-        (try? AttributedString(markdown: s, including: \.ask))
+        (try? AttributedString(markdown: s, including: \.solas))
             ?? AttributedString(s)
     }
 

@@ -1,10 +1,10 @@
-# Ask
+# Solas
 
-A macOS menu-bar explainer card. Summon it with one keystroke, type a concept, get a concise explanation, dismiss — without leaving flow.
+Solas (Irish for "light") is a macOS menu-bar explainer card. Summon it with one keystroke, type a concept, get a concise explanation, dismiss — without leaving flow.
 
 ## How it works
 
-Ask shells out to your existing [`opencode`](https://github.com/sst/opencode) binary (`opencode run`, headless), so it inherits your auth, providers, and models. No second API key.
+Solas shells out to your existing [`opencode`](https://github.com/sst/opencode) binary (`opencode run`, headless), so it inherits your auth, providers, and models. No second API key.
 
 ## Features
 
@@ -20,10 +20,10 @@ Requirements: macOS 14+, Xcode command-line tools (Swift 6), `opencode` installe
 
 ```sh
 git clone <this-repo>
-cd Ask
+cd Solas
 sh scripts/package.sh
-cp -R Ask.app /Applications/
-open /Applications/Ask.app
+cp -R Solas.app /Applications/
+open /Applications/Solas.app
 ```
 
 `scripts/package.sh` builds release, stamps the build ID, and signs with your Apple Development identity when available (keeps the Accessibility grant stable across rebuilds).
@@ -36,7 +36,7 @@ Grant **Accessibility** (and **Input Monitoring**, if prompted) when enabling Ke
 2. Type a concept (e.g. `gravity`), press `⏎`.
 3. Read the answer (plain text is already in your clipboard). `Esc` clears/closes.
 
-Logs live at `~/Library/Logs/Ask.log`. If the hotkey ever stops working, open the shortcut help card → Copy diagnostics.
+Logs live at `~/Library/Logs/Solas.log`. If the hotkey ever stops working, open the shortcut help card → Copy diagnostics.
 
 ## Tech Stack
 

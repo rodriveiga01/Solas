@@ -6,9 +6,9 @@ import Foundation
 @MainActor
 final class ModelStore: ObservableObject {
     static let freeDefault = "opencode/muse-spark-1.3-contributor-free"
-    private static let pickKey = "Ask.didPickModel"
-    private static let modelKey = "Ask.selectedModel"
-    private static let introKey = "Ask.didIntroducePicker"
+    private static let pickKey = "Solas.didPickModel"
+    private static let modelKey = "Solas.selectedModel"
+    private static let introKey = "Solas.didIntroducePicker"
 
     @Published var models: [String] = []
     @Published var selected: String?

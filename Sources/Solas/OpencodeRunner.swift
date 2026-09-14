@@ -2,7 +2,7 @@ import Foundation
 
 /// User-facing failures. Every case names the problem and the recovery —
 /// the card never goes blank after a run.
-enum AskRunError: LocalizedError {
+enum SolasRunError: LocalizedError {
     case emptyQuestion
     case binaryMissing(path: String)
     case launchFailed(String)
@@ -71,13 +71,13 @@ final class OpencodeRunner: Sendable {
         proc?.terminate()
     }
 
-    /// Explain a concept. Always returns Markdown or throws AskRunError —
+    /// Explain a concept. Always returns Markdown or throws SolasRunError —
     /// never an empty success (the card always has something to show).
     func ask(_ question: String, model: String?, timeoutSeconds: Int = 120) async throws -> String {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { throw AskRunError.emptyQuestion }
+        guard !q.isEmpty else { throw SolasRunError.emptyQuestion }
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
-            throw AskRunError.binaryMissing(path: binary.path)
+            throw SolasRunError.binaryMissing(path: binary.path)
         }
         let prompt = Self.explainerPrompt(for: q)
         let binary = self.binary
@@ -112,7 +112,7 @@ final class OpencodeRunner: Sendable {
 
                 do { try proc.run() } catch {
                     self.clearRun(process: nil)
-                    cont.resume(throwing: AskRunError.launchFailed(error.localizedDescription))
+                    cont.resume(throwing: SolasRunError.launchFailed(error.localizedDescription))
                     return
                 }
 
@@ -173,7 +173,7 @@ final class OpencodeRunner: Sendable {
                     return
                 }
                 if didTimeout {
-                    cont.resume(throwing: AskRunError.timeout(seconds: timeoutSeconds))
+                    cont.resume(throwing: SolasRunError.timeout(seconds: timeoutSeconds))
                     return
                 }
 
@@ -181,7 +181,7 @@ final class OpencodeRunner: Sendable {
                 let err = String(data: errBox.data, encoding: .utf8) ?? ""
                 let clean = Self.sanitize(raw)
                 let secs = String(format: "%.1f", Date().timeIntervalSince(started))
-                AskLog.log("ask done model=\(modelArg ?? "default") exit=\(proc.terminationStatus) secs=\(secs) cleanChars=\(clean.count)")
+                SolasLog.log("solas done model=\(modelArg ?? "default") exit=\(proc.terminationStatus) secs=\(secs) cleanChars=\(clean.count)")
 
                 if proc.terminationStatus == 0, !clean.isEmpty {
                     cont.resume(returning: clean)
@@ -190,12 +190,12 @@ final class OpencodeRunner: Sendable {
                 let errTrim = Self.sanitize(err).trimmingCharacters(in: .whitespacesAndNewlines)
                 let lower = (clean + "\n" + errTrim).lowercased()
                 if lower.contains("auth") || lower.contains("login") || lower.contains("401") || lower.contains("unauthorized") {
-                    cont.resume(throwing: AskRunError.authNeeded(errTrim.isEmpty ? clean : errTrim))
+                    cont.resume(throwing: SolasRunError.authNeeded(errTrim.isEmpty ? clean : errTrim))
                 } else if lower.contains("model") && (lower.contains("not found") || lower.contains("unknown") || lower.contains("invalid")) {
-                    cont.resume(throwing: AskRunError.modelMissing(errTrim.isEmpty ? clean : errTrim))
+                    cont.resume(throwing: SolasRunError.modelMissing(errTrim.isEmpty ? clean : errTrim))
                 } else {
                     let msg = clean.isEmpty ? errTrim : clean
-                    cont.resume(throwing: AskRunError.emptyOutput(exit: proc.terminationStatus, stderr: msg))
+                    cont.resume(throwing: SolasRunError.emptyOutput(exit: proc.terminationStatus, stderr: msg))
                 }
             }
         }
@@ -212,7 +212,7 @@ final class OpencodeRunner: Sendable {
     static func explainerPrompt(for q: String) -> String {
         let safe = q.replacingOccurrences(of: "\"", with: "'")
         return """
-        You power Ask, a tiny macOS popup that explains concepts in one glance. The user typed: "\(safe)". \
+        You power Solas, a tiny macOS popup that explains concepts in one glance. The user typed: "\(safe)". \
         If it is a concept, explain it; if it is a question, answer it directly. Same compact style either way.
         Format the answer in Markdown, under 120 words total:
         - One striking essence line in bold first.
@@ -288,9 +288,9 @@ enum BuildInfo {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "dev-binary"
     }
 }
-/// Lives at ~/Library/Logs/Ask.log; capped at 256KB (keeps the tail).
+/// Lives at ~/Library/Logs/Solas.log; capped at 256KB (keeps the tail).
 /// Failures to write are ignored.
-enum AskLog {
+enum SolasLog {
     private static let maxBytes = 256 * 1024
 
     static func log(_ msg: String) {
@@ -328,6 +328,6 @@ enum AskLog {
     }
     private static var logURL: URL? {
         FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Logs/Ask.log")
+            .appendingPathComponent("Logs/Solas.log")
     }
 }

@@ -7,7 +7,7 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var app: AppDelegate
     @ObservedObject var models: ModelStore
-    let onAsk: (String, String?) async throws -> String
+    let onSolas: (String, String?) async throws -> String
     let onClose: () -> Void
     let onQuit: () -> Void
 
@@ -77,14 +77,14 @@ struct ContentView: View {
         }
         .padding(20)
         .frame(width: 540)
-        .onReceive(NotificationCenter.default.publisher(for: .askReset)) { _ in reset() }
-        .onReceive(NotificationCenter.default.publisher(for: .askFocusInput)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .solasReset)) { _ in reset() }
+        .onReceive(NotificationCenter.default.publisher(for: .solasFocusInput)) { _ in
             if !isLoading { inputFocused = true }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .askShowModels)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .solasShowModels)) { _ in
             if !isLoading { showModels = true; showShortcut = false }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .askShowHotkeys)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .solasShowHotkeys)) { _ in
             if !isLoading { showShortcut = true }
         }
         .onAppear { inputFocused = true }
@@ -104,7 +104,7 @@ struct ContentView: View {
 
     private func handleEscape() {
         if isLoading {
-            app.cancelAsk()
+            app.cancelSolas()
         } else if showShortcut {
             showShortcut = false
             inputFocused = true
@@ -149,7 +149,7 @@ struct ContentView: View {
                 .frame(width: 26)
                 .accessibilityHidden(true)
 
-            TextField("Ask anything — try “gravity”", text: $question)
+            TextField("Explain anything — try “gravity”", text: $question)
                 .textFieldStyle(.plain)
                 .font(.system(size: 19))
                 .focused($inputFocused)
@@ -160,7 +160,7 @@ struct ContentView: View {
                 .accessibilityHint("Type a concept or question, then press Return to explain")
 
             if isLoading {
-                Button("Cancel") { app.cancelAsk() }
+                Button("Cancel") { app.cancelSolas() }
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -200,7 +200,7 @@ struct ContentView: View {
                 .frame(height: 18)
 
             Button {
-                if isLoading { app.cancelAsk() }
+                if isLoading { app.cancelSolas() }
                 onClose()
             } label: {
                 Image(systemName: "xmark")
@@ -438,7 +438,7 @@ struct ContentView: View {
                 .foregroundStyle(Color.accentColor)
                 .padding(.top, 20)
                 .accessibilityHidden(true)
-            Text("Summon Ask from anywhere")
+            Text("Summon Solas from anywhere")
                 .font(.system(size: 15, weight: .semibold))
             HStack(spacing: 6) {
                 keycap("⇧")
@@ -618,7 +618,7 @@ struct ContentView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                     Spacer(minLength: 0)
-                    Button("Quit Ask") { onQuit() }
+                    Button("Quit Solas") { onQuit() }
                         .buttonStyle(.plain)
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
@@ -709,7 +709,7 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Ask (card stays visible; spinner inline; answer or error lands inline)
+    // MARK: - Solas (card stays visible; spinner inline; answer or error lands inline)
 
     private func submit() {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -723,11 +723,11 @@ struct ContentView: View {
         answer = ""
         copied = false
         app.setThinking(true)
-        AskLog.log("ask start model=\(models.selected ?? "default") q=\(q.prefix(60))")
+        SolasLog.log("solas start model=\(models.selected ?? "default") q=\(q.prefix(60))")
         Task {
             do {
                 let chosen: String? = models.selected
-                let result = try await onAsk(q, chosen)
+                let result = try await onSolas(q, chosen)
                 await MainActor.run {
                     withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.38, dampingFraction: 0.78)) { answer = result }
                     isLoading = false
@@ -744,7 +744,7 @@ struct ContentView: View {
                     // mid-think): reveal without reset so the result is seen
                     // instead of orphaned-then-wiped on the next open.
                     if !app.isPanelVisible { app.showPanel(reset: false) }
-                    AskLog.log("ask ok chars=\(result.count)")
+                    SolasLog.log("solas ok chars=\(result.count)")
                     Task {
                         try? await Task.sleep(nanoseconds: 3_000_000_000)
                         await MainActor.run { withAnimation { copied = false } }
@@ -755,7 +755,7 @@ struct ContentView: View {
                     isLoading = false
                     app.setThinking(false)
                     inputFocused = true
-                    AskLog.log("ask cancelled")
+                    SolasLog.log("solas cancelled")
                 }
             } catch {
                 await MainActor.run {
@@ -766,7 +766,7 @@ struct ContentView: View {
                     app.setThinking(false)
                     inputFocused = true
                     if !app.isPanelVisible { app.showPanel(reset: false) }
-                    AskLog.log("ask error: \(error.localizedDescription.prefix(200))")
+                    SolasLog.log("solas error: \(error.localizedDescription.prefix(200))")
                 }
             }
         }

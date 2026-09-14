@@ -1,4 +1,5 @@
 .build/
+Solas.app/
 Ask.app/
 .DS_Store
 *.xcuserstate

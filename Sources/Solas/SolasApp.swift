@@ -6,7 +6,7 @@ import ApplicationServices
 // MARK: - Entry
 
 @main
-struct AskApp: App {
+struct SolasApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {
@@ -66,14 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     private var hidTap: CFMachPort?
     private var hidRunLoopSource: CFRunLoopSource?
     private var lastToggle = Date.distantPast
-    private let lastFireKey = "Ask.lastHotkeyFire"
+    private let lastFireKey = "Solas.lastHotkeyFire"
     /// Last time any tier actually fired (persisted — proof across restarts).
     var lastFire: Date? { UserDefaults.standard.object(forKey: lastFireKey) as? Date }
     var lastFireDescription: String {
         guard let d = lastFire else { return "never" }
         return ISO8601DateFormatter().string(from: d)
     }
-    private static let axPromptKey = "Ask.didPromptAX"
+    private static let axPromptKey = "Solas.didPromptAX"
     private(set) var thinking = false
     private let runner = OpencodeRunner()
     private let models = ModelStore()
@@ -104,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         let owned = Self.hotKeys.filter { registeredIDs.contains($0.id) }.map(\.name).joined(separator: ",")
         let pid = ProcessInfo.processInfo.processIdentifier
         let path = Bundle.main.bundlePath
-        AskLog.log("Ask launched build=\(BuildInfo.tag) pid=\(pid) path=\(path) os=\(os) hotkeys-owned=[\(owned)] secureInput=\(secureInputOn()) axTrusted=\(axTrusted) tap=\(tapStatus())")
+        SolasLog.log("Solas launched build=\(BuildInfo.tag) pid=\(pid) path=\(path) os=\(os) hotkeys-owned=[\(owned)] secureInput=\(secureInputOn()) axTrusted=\(axTrusted) tap=\(tapStatus())")
         // Stale instances release hotkeys asynchronously — retry on a
         // lengthening schedule, not just once.
         for delay in [2.0, 6.0, 12.0] {
@@ -132,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        // Spotlight-by-name summon: typing "Ask" in Spotlight and hitting
+        // Spotlight-by-name summon: typing "Solas" in Spotlight and hitting
         // Enter relaunches/focuses us — bring the card forward every time.
         // (The only Spotlight integration Apple allows: launch by name.)
         showPanel()
@@ -166,16 +166,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         guard let button = statusItem?.button else { return }
-        button.image = NSImage(systemSymbolName: "sparkle.magnifyingglass", accessibilityDescription: "Ask")
+        button.image = NSImage(systemSymbolName: "sparkle.magnifyingglass", accessibilityDescription: "Solas")
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         button.action = #selector(statusClicked(_:))
         button.target = self
 
         let menu = NSMenu()
         menu.delegate = self
-        let askItem = NSMenuItem(title: "Explain a concept…", action: #selector(showFromMenu(_:)), keyEquivalent: "")
-        askItem.target = self
-        menu.addItem(askItem)
+        let explainItem = NSMenuItem(title: "Explain a concept…", action: #selector(showFromMenu(_:)), keyEquivalent: "")
+        explainItem.target = self
+        menu.addItem(explainItem)
         let modelItem = NSMenuItem(title: "Choose model…", action: #selector(pickModel(_:)), keyEquivalent: "")
         modelItem.target = self
         menu.addItem(modelItem)
@@ -183,7 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         hkItem.target = self
         menu.addItem(hkItem)
         menu.addItem(.separator())
-        let quitItem = NSMenuItem(title: "Quit Ask", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Solas", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quitItem.target = NSApp
         menu.addItem(quitItem)
         self.statusMenu = menu
@@ -205,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     @objc private func showFromMenu(_ sender: Any?) {
         if let panel, panel.isVisible {
             NSApp.activate(ignoringOtherApps: true)
-            NotificationCenter.default.post(name: .askFocusInput, object: nil)
+            NotificationCenter.default.post(name: .solasFocusInput, object: nil)
         } else {
             showPanel()
         }
@@ -213,12 +213,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
 
     @objc private func pickModel(_ sender: Any?) {
         showPanel(reset: false)
-        NotificationCenter.default.post(name: .askShowModels, object: nil)
+        NotificationCenter.default.post(name: .solasShowModels, object: nil)
     }
 
     @objc private func showHotkeyHelp(_ sender: Any?) {
         showPanel(reset: false)
-        NotificationCenter.default.post(name: .askShowHotkeys, object: nil)
+        NotificationCenter.default.post(name: .solasShowHotkeys, object: nil)
     }
 
     // MARK: Thinking state (drives the menu icon only)
@@ -227,11 +227,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         thinking = t
         statusItem?.button?.image = NSImage(
             systemSymbolName: t ? "sparkles" : "sparkle.magnifyingglass",
-            accessibilityDescription: "Ask"
+            accessibilityDescription: "Solas"
         )
     }
 
-    func cancelAsk() {
+    func cancelSolas() {
         runner.cancelCurrent()
     }
 
@@ -243,7 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         let content = ContentView(
             app: self,
             models: models,
-            onAsk: { question, model in try await runner.ask(question, model: model) },
+            onSolas: { question, model in try await runner.ask(question, model: model) },
             onClose: { [weak self] in self?.hidePanel() },
             onQuit: { NSApp.terminate(nil) }
         )
@@ -324,7 +324,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         let now = Date()
         if now.timeIntervalSince(lastToggle) < 0.25 { return }
         lastToggle = now
-        AskLog.log("toggle (visible=\(panel.isVisible) thinking=\(thinking) front=\(frontID()) secureInput=\(secureInputOn()))")
+        SolasLog.log("toggle (visible=\(panel.isVisible) thinking=\(thinking) front=\(frontID()) secureInput=\(secureInputOn()))")
         panel.isVisible ? hidePanel() : showPanel()
     }
 
@@ -335,7 +335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     /// then toggles (dedup collapses tier echoes).
     func hotkeyFired(source: String, detail: String) {
         UserDefaults.standard.set(Date(), forKey: lastFireKey)
-        AskLog.log("hotkey fired → toggle (\(source) \(detail))")
+        SolasLog.log("hotkey fired → toggle (\(source) \(detail))")
         togglePanel()
     }
 
@@ -354,7 +354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         let owned = Self.hotKeys.filter { registeredIDs.contains($0.id) }.map(\.name).joined(separator: ",")
         let pid = ProcessInfo.processInfo.processIdentifier
         let path = Bundle.main.bundlePath
-        var s = "Ask diagnostics build=\(BuildInfo.tag)\n"
+        var s = "Solas diagnostics build=\(BuildInfo.tag)\n"
         s += "hotkey-owned: \(owned.isEmpty ? "(none)" : owned)\n"
         s += "last-fire: \(lastFireDescription)\n"
         s += "ax-trusted: \(axTrusted)\n"
@@ -366,12 +366,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         s += Self.logTail(lines: 40)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(s, forType: .string)
-        AskLog.log("diagnostics copied")
+        SolasLog.log("diagnostics copied")
     }
 
     private static func logTail(lines: Int) -> String {
         guard let url = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Logs/Ask.log"),
+            .appendingPathComponent("Logs/Solas.log"),
               let data = try? Data(contentsOf: url),
               let text = String(data: data, encoding: .utf8) else { return "(no log)" }
         return text.split(separator: "\n", omittingEmptySubsequences: false).suffix(lines).joined(separator: "\n")
@@ -403,9 +403,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         // hides and app switches; Esc on a finished answer clears it.
         // The reset flag is kept for explicit programmatic resets only.
         if reset {
-            NotificationCenter.default.post(name: .askReset, object: nil)
+            NotificationCenter.default.post(name: .solasReset, object: nil)
         }
-        NotificationCenter.default.post(name: .askFocusInput, object: nil)
+        NotificationCenter.default.post(name: .solasFocusInput, object: nil)
     }
 
     /// Hiding never clears — answers survive hide, switch, and reopen.
@@ -433,7 +433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         var ref: EventHandlerRef?
         let status = InstallEventHandler(GetApplicationEventTarget(), upp, 1, &spec, nil, &ref)
         if status != noErr {
-            AskLog.log("hotkey handler install failed (\(status)) — hotkeys will not fire")
+            SolasLog.log("hotkey handler install failed (\(status)) — hotkeys will not fire")
         } else {
             eventHandlerRef = ref
         }
@@ -448,14 +448,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
 
     private func registerHotKey(keyCode: Int, modifiers: Int, id: Int) -> Bool {
         if registeredIDs.contains(id) { return true }
-        let hotKeyID = EventHotKeyID(signature: OSType(0x41534B21), id: UInt32(id))
+        let hotKeyID = EventHotKeyID(signature: OSType(0x534F4C21), id: UInt32(id)) // "SOL!"
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), hotKeyID, GetApplicationEventTarget(), 0, &ref)
         guard status == noErr else {
             if status == Self.hotKeyExistsErr {
-                AskLog.log("hotkey id \(id) held by another process (stale Ask?)")
+                SolasLog.log("hotkey id \(id) held by another process (stale Solas?)")
             } else {
-                AskLog.log("hotkey id \(id) registration failed (\(status))")
+                SolasLog.log("hotkey id \(id) registration failed (\(status))")
             }
             return false
         }
@@ -464,7 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         return true
     }
 
-    /// Kills stale copies of Ask so this instance owns the hotkeys.
+    /// Kills stale copies of Solas so this instance owns the hotkeys.
     /// Same Carbon signature is global: whoever holds it blocks us.
     /// Spares only an identified *different* product sharing the name;
     /// dev binaries (nil bundle id) always fight for the same combos.
@@ -474,14 +474,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             guard app.processIdentifier != me else { continue }
             let name = app.localizedName ?? ""
             let exec = app.executableURL?.lastPathComponent ?? ""
-            guard name == "Ask" || exec == "Ask" else { continue }
+            guard name == "Solas" || exec == "Solas" else { continue }
             // Same Carbon signature is global: whoever holds it blocks us.
             // Spare only an identified *different* product; dev binaries
             // (nil bundle id) always fight for the same combos.
             if let myID = Bundle.main.bundleIdentifier,
                let otherID = app.bundleIdentifier,
                myID != otherID { continue }
-            AskLog.log("terminating stale instance pid \(app.processIdentifier)")
+            SolasLog.log("terminating stale instance pid \(app.processIdentifier)")
             app.terminate()
             let pid = app.processIdentifier
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
@@ -509,10 +509,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         hotkeyNote = missing.isEmpty ? nil : "Shortcut unavailable — details"
     }
 
-    /// In-app fallback while Ask is frontmost: catch the hotkey locally
+    /// In-app fallback while Solas is frontmost: catch the hotkey locally
     /// and swallow it. Superset match tolerates stowaway flags (caps lock,
     /// fn, driver-added bits); global monitors never see own-app events,
-    /// so this path owns presses made while Ask is focused.
+    /// so this path owns presses made while Solas is focused.
     private func registerLocalFallback() {
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 49 else { return event }
@@ -537,14 +537,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             let mods = event.modifierFlags.intersection([.control, .shift, .option, .command])
             guard !mods.isEmpty else { return } // plain Space: pass silently
             let detail = String(format: "flags=0x%lX front=%@", event.modifierFlags.rawValue, self?.frontID() ?? "?")
-            AskLog.log("space-monitor \(detail)")
+            SolasLog.log("space-monitor \(detail)")
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             guard flags.contains([.control, .shift]) else { return }
             DispatchQueue.main.async { [weak self] in
                 self?.hotkeyFired(source: "monitor", detail: detail)
             }
         }) else {
-            AskLog.log("global monitor creation FAILED (nil) — will retry")
+            SolasLog.log("global monitor creation FAILED (nil) — will retry")
             return
         }
         globalMonitor = tap
@@ -567,14 +567,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: mask,
-            callback: askTapCallback,
+            callback: solasTapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            AskLog.log("hid tap creation FAILED (nil) — grant Input Monitoring + Accessibility, then relaunch")
+            SolasLog.log("hid tap creation FAILED (nil) — grant Input Monitoring + Accessibility, then relaunch")
             return
         }
         guard let src = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
-            AskLog.log("hid tap source FAILED — will retry")
+            SolasLog.log("hid tap source FAILED — will retry")
             CFMachPortInvalidate(tap)
             return
         }
@@ -582,7 +582,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         CGEvent.tapEnable(tap: tap, enable: true)
         hidTap = tap
         hidRunLoopSource = src
-        AskLog.log("hid tap active — pre-dispatch capture on")
+        SolasLog.log("hid tap active — pre-dispatch capture on")
     }
 
     /// Re-enables a tap the system parked for slow processing, or rebuilds
@@ -610,9 +610,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             globalMonitor = nil
             registerTrustedMonitor()
             registerHIDTap()
-            AskLog.log("AX granted — monitor rebuilt under trust tap=\(tapStatus())")
+            SolasLog.log("AX granted — monitor rebuilt under trust tap=\(tapStatus())")
         } else {
-            AskLog.log("AX revoked — tap/monitor degraded")
+            SolasLog.log("AX revoked — tap/monitor degraded")
         }
     }
 
@@ -636,10 +636,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
 }
 
 extension Notification.Name {
-    static let askFocusInput = Notification.Name("askFocusInput")
-    static let askShowModels = Notification.Name("askShowModels")
-    static let askShowHotkeys = Notification.Name("askShowHotkeys")
-    static let askReset = Notification.Name("askReset")
+    static let solasFocusInput = Notification.Name("solasFocusInput")
+    static let solasShowModels = Notification.Name("solasShowModels")
+    static let solasShowHotkeys = Notification.Name("solasShowHotkeys")
+    static let solasReset = Notification.Name("solasReset")
 }
 
 // MARK: - Pre-dispatch tap callback (C function: no captures, no actor)
@@ -647,7 +647,7 @@ extension Notification.Name {
 /// Session-tap callback for tier 3. Synchronous part stays pure (code +
 /// flags only) so the swallow decision is instant; everything touching the
 /// app hops to the main actor. Never reads key characters — codes only.
-private func askTapCallback(
+private func solasTapCallback(
     proxy: CGEventTapProxy,
     type: CGEventType,
     event: CGEvent,
@@ -672,7 +672,7 @@ private func askTapCallback(
         let flagsRaw = event.flags.rawValue
         Task { @MainActor in
             let detail = String(format: "flags=0x%llX front=%@", flagsRaw, app.frontID())
-            AskLog.log("space-tap \(detail)")
+            SolasLog.log("space-tap \(detail)")
             if hot { app.hotkeyFired(source: "tap", detail: detail) }
         }
     }

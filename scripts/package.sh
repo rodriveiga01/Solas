@@ -1,15 +1,15 @@
 #!/bin/sh
-# Packages the release binary as Ask.app with a stable identity
+# Packages the release binary as Solas.app with a stable identity
 # (LSUIElement accessory + fixed bundle id for hotkeys/TCC).
 set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 swift build -c release
-APP="$ROOT/Ask.app"
+APP="$ROOT/Solas.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-cp ".build/release/Ask" "$APP/Contents/MacOS/Ask"
-cp "resources/Ask.app-Info.plist" "$APP/Contents/Info.plist"
+cp ".build/release/Solas" "$APP/Contents/MacOS/Solas"
+cp "resources/Solas.app-Info.plist" "$APP/Contents/Info.plist"
 # Stamp build identity: visible in the help card + launch log, so a stale
 # /Applications copy can never masquerade as the new build.
 TAG="$(date +%Y%m%d-%H%M%S)"

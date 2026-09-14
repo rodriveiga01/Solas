@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Ask",
+    name: "Solas",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "Ask",
-            path: "Sources/Ask"
+            name: "Solas",
+            path: "Sources/Solas"
         )
     ]
 )
