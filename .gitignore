@@ -1,0 +1,5 @@
+.build/
+Ask.app/
+.DS_Store
+*.xcuserstate
+xcuserdata/
