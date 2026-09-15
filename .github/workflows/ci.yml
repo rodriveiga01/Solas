@@ -16,8 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Swift version (preinstalled, no toolchain download)
-        run: swift --version
+      - name: Select newest Xcode (Swift 6+)
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)/Contents/Developer"
+          swift --version
 
       - name: Cache SwiftPM build
         uses: actions/cache@v4
