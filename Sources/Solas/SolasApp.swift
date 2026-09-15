@@ -116,13 +116,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
 
     /// Freeze live content into a static bitmap for the flight. Per-frame
     /// cost drops to ~zero (the window server composites a still image
-    /// while the frame interpolates) — this is what makes the morph
-    /// smooth; resizing live vibrancy 120×/s on the CPU cannot be.
+    /// while the frame interpolates) — resizing live vibrancy 120×/s on
+    /// the CPU cannot stay smooth. The rep carries explicit alpha so the
+    /// rounded corners and padding stay transparent instead of baking to
+    /// an opaque grey square.
     private func beginSnapshotFlight() {
         guard let panel, liveContent == nil, let content = panel.contentView else { return }
         let bounds = content.bounds
+        let scale = max(1, panel.backingScaleFactor)
         guard !bounds.isEmpty,
-              let rep = content.bitmapImageRepForCachingDisplay(in: bounds) else { return }
+              let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: Int(bounds.width * scale),
+                pixelsHigh: Int(bounds.height * scale),
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+              ) else { return }
+        rep.size = bounds.size
         content.cacheDisplay(in: bounds, to: rep)
         let img = NSImage(size: bounds.size)
         img.addRepresentation(rep)
@@ -131,7 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         holder.autoresizingMask = [.width, .height]
         liveContent = content
         panel.contentView = holder
-        SolasLog.log("flight snapshot \(Int(bounds.width))x\(Int(bounds.height))")
+        SolasLog.log("flight snapshot \(Int(bounds.width))x\(Int(bounds.height)) alpha")
     }
 
     private func endSnapshotFlight() {
@@ -639,7 +649,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             // typing continues elsewhere while it travels.
             panel.resignKey()
             panel.orderFront(nil)
-            flyPanel(to: target, response: 0.45, dampingRatio: 1.0)
+            flyPanel(to: target, response: 0.34, dampingRatio: 1.0)
         }
         announceParked("Solas is thinking about \(ParkedPill.truncate(q))")
     }
@@ -672,7 +682,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         } else {
             panel.resignKey()
             panel.orderFront(nil)
-            flyPanel(to: target, response: 0.45, dampingRatio: 1.0)
+            flyPanel(to: target, response: 0.34, dampingRatio: 1.0)
         }
     }
 
@@ -719,7 +729,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             panel.makeKeyAndOrderFront(nil)
         } else if let target = topCenterRect(height: panel.frame.height) {
             panel.makeKeyAndOrderFront(nil)
-            flyPanel(to: target, response: 0.42, dampingRatio: 0.92)
+            flyPanel(to: target, response: 0.36, dampingRatio: 0.92)
         } else {
             panel.makeKeyAndOrderFront(nil)
         }

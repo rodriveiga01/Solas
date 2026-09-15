@@ -132,13 +132,13 @@ final class ParkedPillTests: XCTestCase {
         var f = PanelFlight(
             rect: CGRect(x: 700, y: 600, width: 540, height: 300),
             target: CGRect(x: 1600, y: 1000, width: 120, height: 40),
-            vel: (0, 0, 0, 0), response: 0.38, dampingRatio: 1.0
+            vel: (0, 0, 0, 0), response: 0.34, dampingRatio: 1.0
         )
         let ticks = runFlight(&f)
         XCTAssertTrue(f.isSettled)
-        XCTAssertLessThan(ticks, 120, "should land in well under 2s")
-        XCTAssertEqual(f.rect.minX, f.target.minX, accuracy: 0.5)
-        XCTAssertEqual(f.rect.width, f.target.width, accuracy: 0.5)
+        XCTAssertLessThan(ticks, 72, "should land in about half a second, not drag for seconds")
+        XCTAssertEqual(f.rect.minX, f.target.minX, accuracy: 1.0)
+        XCTAssertEqual(f.rect.width, f.target.width, accuracy: 1.0)
     }
 
     func testFlightSmoothNeverOvershoots() {

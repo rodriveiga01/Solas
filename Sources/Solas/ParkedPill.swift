@@ -107,8 +107,8 @@ struct PanelFlight {
     var response: Double
     var dampingRatio: Double
 
-    nonisolated static let settlePosition: CGFloat = 0.3
-    nonisolated static let settleVelocity: CGFloat = 30
+    nonisolated static let settlePosition: CGFloat = 0.8
+    nonisolated static let settleVelocity: CGFloat = 60
 
     var isSettled: Bool {
         abs(target.minX - rect.minX) < Self.settlePosition &&
