@@ -38,4 +38,11 @@ final class SanitizeTests: XCTestCase {
         XCTAssertTrue(prompt.contains("gravity"))
         XCTAssertTrue(prompt.contains("120 words"))
     }
+
+    func testExplainerPromptAnswersInUserLanguage() {
+        let prompt = OpencodeRunner.explainerPrompt(for: "gravedad")
+        XCTAssertTrue(prompt.contains("gravedad"))
+        XCTAssertTrue(prompt.lowercased().contains("same language"))
+        XCTAssertTrue(prompt.lowercased().contains("default to english"))
+    }
 }

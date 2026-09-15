@@ -214,6 +214,9 @@ final class OpencodeRunner: Sendable {
         return """
         You power Solas, a tiny macOS popup that explains concepts in one glance. The user typed: "\(safe)". \
         If it is a concept, explain it; if it is a question, answer it directly. Same compact style either way.
+        Detect the user's language from their input and answer entirely in that same language \
+        (English input → English answer, Spanish → Spanish, French → French, and so on); \
+        default to English when the language is ambiguous.
         Format the answer in Markdown, under 120 words total:
         - One striking essence line in bold first.
         - Then 2 to 4 short bullets; bold the key term in each.

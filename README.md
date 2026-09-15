@@ -16,7 +16,7 @@ Solas shells out to your existing [`opencode`](https://github.com/sst/opencode) 
 ## Features
 
 - **Global hotkey** `⇧⌃Space` summons the card from anywhere (`⌘Space` is never touched).
-- **Concept explainer**: bold essence line, 2–4 bullets with key terms, optional analogy — under ~120 words.
+- **Concept explainer**: bold essence line, 2–4 bullets with key terms, optional analogy — under ~120 words. Answers in your language (English → English, Spanish → Spanish, etc.; defaults to English when ambiguous).
 - **Model picker**: pre-selects a free model on first launch; never blocks asking; "follow opencode default" escape hatch.
 - **Sticky answers**: hiding or switching apps never clears a finished answer; plain text is auto-copied to the clipboard.
 - **Hotkey diagnostics**: the shortcut help card shows build, last-received time, capture trust, and tap status, with one-click diagnostics copy.
