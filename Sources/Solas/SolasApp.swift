@@ -106,15 +106,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
 
     /// Active spring flight, if any. While set, it owns the panel frame —
     /// the layout fitter stands down so the two never fight.
+    /// Invariant: flight != nil ⟺ a static snapshot stands in for live
+    /// content (stopFlight always restores the live view).
     private var flight: PanelFlight?
-    private var flightTimer: Timer?
+    private var flightLink: CADisplayLink?
     private var flightLastTick = Date()
     private var flightActive: Bool { flight != nil }
+    private var liveContent: NSView?
+
+    /// Freeze live content into a static bitmap for the flight. Per-frame
+    /// cost drops to ~zero (the window server composites a still image
+    /// while the frame interpolates) — this is what makes the morph
+    /// smooth; resizing live vibrancy 120×/s on the CPU cannot be.
+    private func beginSnapshotFlight() {
+        guard let panel, liveContent == nil, let content = panel.contentView else { return }
+        let bounds = content.bounds
+        guard !bounds.isEmpty,
+              let rep = content.bitmapImageRepForCachingDisplay(in: bounds) else { return }
+        content.cacheDisplay(in: bounds, to: rep)
+        let img = NSImage(size: bounds.size)
+        img.addRepresentation(rep)
+        let holder = NSImageView(frame: bounds)
+        holder.image = img
+        holder.autoresizingMask = [.width, .height]
+        liveContent = content
+        panel.contentView = holder
+        SolasLog.log("flight snapshot \(Int(bounds.width))x\(Int(bounds.height))")
+    }
+
+    private func endSnapshotFlight() {
+        guard let panel, let live = liveContent else { return }
+        live.frame = panel.contentView?.bounds ?? live.frame
+        panel.contentView = live
+        liveContent = nil
+    }
 
     /// Fly the panel to a target rect on a spring. Retargets preserve the
     /// live frame + velocity, so mid-flight peeks redirect smoothly.
     private func flyPanel(to target: NSRect, response: Double, dampingRatio: Double) {
         guard let panel else { return }
+        beginSnapshotFlight()
         if flight == nil {
             flight = PanelFlight(
                 rect: panel.frame, target: target,
@@ -124,14 +155,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             flight?.retarget(from: panel.frame, to: target, response: response, dampingRatio: dampingRatio)
         }
         SolasLog.log("flight to=\(NSStringFromRect(target)) response=\(response) damping=\(dampingRatio)")
-        if flightTimer == nil {
+        if flightLink == nil {
             flightLastTick = Date()
-            // 120Hz keeps ProMotion smooth; common modes so tracking loops
-            // don't stall the flight.
-            let t = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in self?.flightTick() }
-            RunLoop.main.add(t, forMode: .common)
-            flightTimer = t
+            // Vsync-locked tick on the window's own display (ProMotion
+            // aware), fired on the main runloop — a Timer drifts off-vsync
+            // and judders.
+            let link = panel.displayLink(target: self, selector: #selector(flightDisplayLinkFired(_:)))
+            link.add(to: .main, forMode: .common)
+            flightLink = link
         }
+    }
+
+    /// Display-link tick — already on main via the .main runloop.
+    @objc private func flightDisplayLinkFired(_ link: CADisplayLink) {
+        flightTick()
     }
 
     private func flightTick() {
@@ -140,8 +177,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         let dt = min(max(now.timeIntervalSince(flightLastTick), 1.0 / 480.0), 1.0 / 20.0)
         flightLastTick = now
         f.step(dt: dt)
-        // Deferred display: forcing a synchronous vibrancy redraw every
-        // tick is what made the flight jank. Coalesce; paint on settle.
+        // Deferred display: the content is a still image, so per-tick
+        // cost is trivial and coalescing keeps it tear-free.
         panel.setFrame(f.rect, display: false)
         flight = f
         if f.isSettled {
@@ -151,9 +188,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     }
 
     private func stopFlight() {
-        flightTimer?.invalidate()
-        flightTimer = nil
+        flightLink?.invalidate()
+        flightLink = nil
         flight = nil
+        endSnapshotFlight()
     }
 
     // kVK_Space = 49. Carbon masks: shiftKey = 512, controlKey = 4096.
@@ -537,6 +575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     /// Hiding never clears — answers survive hide, switch, and reopen.
     /// Also clears any parked state (a hidden pill is gone, not parked).
     func hidePanel() {
+        stopFlight() // restore live content before hiding mid-morph
         isParked = false
         parkedReady = false
         parkedHasError = false
