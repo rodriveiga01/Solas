@@ -139,24 +139,51 @@ struct ParkedPillView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var slide = 0.0
     @State private var arrived = false
+    @State private var draw = 0.0
+    @State private var sheen = 0.0
 
     private var status: PillStatus { ParkedPill.status(isReady: isReady, hasError: hasError) }
 
-    /// The edge is the signal: sliding comet while thinking, settled
-    /// green when done, settled orange + warning icon on error (errors
-    /// keep the redundant cue). No badges otherwise.
-    private var edge: Color {
-        switch status {
-        case .thinking: return .white.opacity(0.16)
-        case .ready: return .green // system green #34C759/#30D158 — the badge green, full strength
-        case .failed: return .orange.opacity(0.45)
+    /// Neutral base ring — always present, the settled color draws over it.
+    private var neutralEdge: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(.white.opacity(0.16), lineWidth: 1)
+            .padding(1)
+    }
+
+    /// Settled state ring: green draws itself in once on arrival (idea 1),
+    /// orange appears instantly on error (errors get no theater).
+    @ViewBuilder
+    private var settledEdge: some View {
+        if status == .ready {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .trim(from: 0, to: draw)
+                .stroke(.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .padding(1)
+        } else if status == .failed {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.orange.opacity(0.45), lineWidth: 2)
+                .padding(1)
         }
     }
 
-    private var edgeWidth: CGFloat {
-        switch status {
-        case .thinking: return 1
-        case .ready, .failed: return 2
+    /// Sheen pass (idea 2): one diagonal light sweep following the draw-in,
+    /// then parked off-pill and invisible. Never mounted under RM.
+    @ViewBuilder
+    private var sheenOverlay: some View {
+        if status == .ready, !reduceMotion {
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [.clear, .white.opacity(0.32), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 70, height: 48)
+                .rotationEffect(.degrees(20))
+                .offset(x: -200 + 400 * sheen)
+                .mask(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
     }
 
@@ -193,12 +220,10 @@ struct ParkedPillView: View {
             .padding(.horizontal, 11)
             .frame(minWidth: 84, maxWidth: 320, minHeight: 48, maxHeight: 48)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(edge, lineWidth: edgeWidth)
-                    .padding(1)
-            )
+            .overlay(neutralEdge)
+            .overlay(settledEdge)
             .overlay(flowOverlay)
+            .overlay(sheenOverlay)
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
             // One soft bounce on ready arrival. Static under Reduce Motion.
             .scaleEffect(arrived && !reduceMotion ? 1 : (isReady && !reduceMotion ? 0.96 : 1))
@@ -208,25 +233,42 @@ struct ParkedPillView: View {
         .accessibilityHint("Activates the Solas card")
         .accessibilityAddTraits(.isButton)
         .onAppear {
-            // Fresh pill each park (branch swap = new identity): start the
-            // slide. Removed with the overlay when the run finishes.
-            if status == .thinking, !reduceMotion {
-                slide = 0
-                withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false)) {
-                    slide = 1
+            // Fresh pill each park (branch swap = new identity).
+            if status == .thinking {
+                // Start the slide (static arc under Reduce Motion).
+                if !reduceMotion {
+                    slide = 0
+                    withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false)) {
+                        slide = 1
+                    }
                 }
-            }
-            if isReady, !reduceMotion {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
-                    arrived = true
-                }
+            } else if isReady {
+                // Reparked onto an already-ready answer: rest state only,
+                // no replay — the performance belongs to the arrival.
+                draw = 1
+                arrived = true
             }
         }
         .onDisappear { slide = 0 }
         .onChange(of: isReady) { _, ready in
-            if ready, !reduceMotion {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
+            // The arrival: bounce + edge draw-in + trailing sheen, once.
+            // Reduce Motion: everything simply appears.
+            if ready {
+                if reduceMotion {
+                    draw = 1
                     arrived = true
+                } else {
+                    draw = 0
+                    sheen = 0
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
+                        arrived = true
+                    }
+                    withAnimation(.easeOut(duration: 0.5)) {
+                        draw = 1
+                    }
+                    withAnimation(.easeOut(duration: 0.6).delay(0.15)) {
+                        sheen = 1
+                    }
                 }
             }
         }
