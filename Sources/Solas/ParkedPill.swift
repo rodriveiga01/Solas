@@ -92,9 +92,11 @@ enum ParkedPill {
     }
 }
 
-/// The parked pill: always the prompt text (`black holes`), state carried
-/// by icon + a whisper of glow. Width hugs the word (120–320pt); no × —
-/// dismiss via peek → Esc/× on the card, cancel from the expanded card.
+/// The parked pill: always the prompt text (`black holes`). While thinking,
+/// a comet arc orbits the pill's edge (modern loader, no spinner); when
+/// done the orbit settles to a check (green) or warning (orange) with a
+/// neutral edge. Width hugs the word (120–320pt); no × — dismiss via
+/// peek → Esc/× on the card, cancel from the expanded card.
 /// Fixed 48pt height, same material + stroke language as the card.
 /// Click = peek/expand.
 struct ParkedPillView: View {
@@ -104,17 +106,10 @@ struct ParkedPillView: View {
     let onPeek: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
+    @State private var orbit: Angle = .zero
     @State private var arrived = false
 
     private var status: PillStatus { ParkedPill.status(isReady: isReady, hasError: hasError) }
-
-    /// One color cue per state, never doubled: thinking breathes accent,
-    /// done/failed rest on the neutral card stroke — the icon alone
-    /// carries ready/failed color.
-    private var edge: Color {
-        status == .thinking ? .accentColor : .white.opacity(0.16)
-    }
 
     private var iconColor: Color {
         switch status {
@@ -127,13 +122,9 @@ struct ParkedPillView: View {
     var body: some View {
         Button(action: onPeek) {
             HStack(spacing: 8) {
-                // Base layer: icon, never the sole carrier alone — text +
-                // VoiceOver label always disambiguate.
-                if status == .thinking {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityHidden(true)
-                } else {
+                // Base layer: check/warning only when finished. While
+                // thinking the orbiting edge is the signal (plus VoiceOver).
+                if status != .thinking {
                     Image(systemName: ParkedPill.iconName(for: status))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(iconColor)
@@ -149,29 +140,52 @@ struct ParkedPillView: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(edge.opacity(reduceMotion ? 0.35 : (status == .thinking ? (pulse ? 0.45 : 0.2) : 1)), lineWidth: 1)
+                    .stroke(.white.opacity(0.16), lineWidth: 1)
             )
+            // Orbit layer: comet arc circling the edge while thinking.
+            // Static arc under Reduce Motion — meaning never rides on
+            // motion alone (icon + VoiceOver label always disambiguate).
+            .overlay {
+                if status == .thinking {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(lineWidth: 2)
+                        .fill(
+                            AngularGradient(
+                                gradient: Gradient(stops: [
+                                    .init(color: .accentColor, location: 0),
+                                    .init(color: .accentColor.opacity(0.35), location: 0.18),
+                                    .init(color: .clear, location: 0.42),
+                                ]),
+                                center: .center
+                            )
+                        )
+                        .rotationEffect(orbit)
+                        .animation(nil, value: status)
+                }
+            }
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
-            // Magic layer: breathing pulse while thinking, one soft bounce
-            // on ready arrival. Static under Reduce Motion.
-            .opacity(status == .thinking && !reduceMotion && pulse ? 0.85 : 1)
+            // One soft bounce on ready arrival. Static under Reduce Motion.
             .scaleEffect(arrived && !reduceMotion ? 1 : (isReady && !reduceMotion ? 0.96 : 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Activates the Solas card")
         .accessibilityAddTraits(.isButton)
-        .onAppear {
-            guard !reduceMotion else { return }
-            if status == .thinking {
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                    pulse = true
-                }
-            } else if isReady {
+        .onAppear { startOrbitIfNeeded() }
+        .onChange(of: isReady) { _, ready in
+            if ready, !reduceMotion {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
                     arrived = true
                 }
             }
+        }
+    }
+
+    private func startOrbitIfNeeded() {
+        guard status == .thinking, !reduceMotion else { return }
+        orbit = .zero
+        withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
+            orbit = .degrees(360)
         }
     }
 
