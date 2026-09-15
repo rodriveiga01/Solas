@@ -41,14 +41,14 @@ enum ParkedPill {
     nonisolated static func pillWidth(
         for text: String,
         showsIcon: Bool = false,
-        minWidth: CGFloat = 84,
+        minWidth: CGFloat = 80,
         maxWidth: CGFloat = 320
     ) -> CGFloat {
         let t = truncate(text)
-        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        let font = NSFont.systemFont(ofSize: 14, weight: .semibold)
         let textW = (t as NSString).size(withAttributes: [.font: font]).width
-        // 13 padding + (16 icon + 8 spacing | 0) + text + 13 padding.
-        let w = ceil(13 + (showsIcon ? 24 : 0) + textW + 13)
+        // 14 padding + (16 icon + 8 spacing | 0) + text + 14 padding.
+        let w = ceil(14 + (showsIcon ? 24 : 0) + textW + 14)
         return min(max(w, minWidth), maxWidth)
     }
 
@@ -111,7 +111,7 @@ struct CometRing: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        let ring = RoundedRectangle(cornerRadius: 24, style: .continuous)
+        let ring = RoundedRectangle(cornerRadius: 20, style: .continuous)
         let end = progress + length
         if end <= 1 {
             return ring.trim(from: progress, to: end).path(in: rect)
@@ -128,7 +128,7 @@ struct CometRing: Shape {
 /// no spinner); when done the edge settles green, or orange + warning on
 /// error. Width hugs the word (120–320pt); no × — dismiss via
 /// peek → Esc/× on the card, cancel from the expanded card.
-/// Fixed 48pt height, same material + stroke language as the card.
+/// Fixed 40pt height, same material + stroke language as the card.
 /// Click = peek/expand.
 struct ParkedPillView: View {
     let question: String
@@ -145,7 +145,7 @@ struct ParkedPillView: View {
 
     /// Neutral base ring — always present, the settled color draws over it.
     private var neutralEdge: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
             .stroke(.white.opacity(0.16), lineWidth: 1)
             .padding(1)
     }
@@ -155,12 +155,12 @@ struct ParkedPillView: View {
     @ViewBuilder
     private var settledEdge: some View {
         if status == .ready {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .trim(from: 0, to: draw)
                 .stroke(.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .padding(1)
         } else if status == .failed {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(.orange.opacity(0.45), lineWidth: 2)
                 .padding(1)
         }
@@ -187,18 +187,18 @@ struct ParkedPillView: View {
                 // green edge says it. VoiceOver labels cover every state.
                 if status == .failed {
                     Image(systemName: ParkedPill.iconName(for: status))
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.orange)
                         .accessibilityHidden(true)
                 }
                 Text(ParkedPill.truncate(question))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
-            .padding(.horizontal, 13)
-            .frame(minWidth: 84, maxWidth: 320, minHeight: 48, maxHeight: 48)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .padding(.horizontal, 14)
+            .frame(minWidth: 80, maxWidth: 320, minHeight: 40, maxHeight: 40)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(neutralEdge)
             .overlay(settledEdge)
             .overlay(flowOverlay)

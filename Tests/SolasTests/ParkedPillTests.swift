@@ -103,11 +103,11 @@ final class ParkedPillTests: XCTestCase {
         let narrow = ParkedPill.pillWidth(for: "hi")
         let wide = ParkedPill.pillWidth(for: "black holes")
         XCTAssertLessThan(narrow, wide)
-        XCTAssertGreaterThanOrEqual(narrow, 84)
+        XCTAssertGreaterThanOrEqual(narrow, 80)
     }
 
     func testPillWidthClamps() {
-        XCTAssertEqual(ParkedPill.pillWidth(for: ""), 84)
+        XCTAssertEqual(ParkedPill.pillWidth(for: ""), 80)
         XCTAssertEqual(ParkedPill.pillWidth(for: String(repeating: "w", count: 200)), 320)
     }
 

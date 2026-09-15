@@ -53,7 +53,7 @@ struct ContentView: View {
                     app.unparkToCenter(source: app.parkedReady ? "unpark-ready-click" : "peek-pill-click")
                 }
             )
-            .frame(height: 48)
+            .frame(height: 40)
             .transition(.opacity)
         } else {
             fullCard

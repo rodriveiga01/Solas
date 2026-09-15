@@ -98,9 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     private var submitDate = Date.distantPast
     private var parkScreen: NSScreen?
     private var lastParkToggle = Date.distantPast
-    private static let pillHeight: CGFloat = 48
+    private static let pillHeight: CGFloat = 40
     private static let pillMaxWidth: CGFloat = 320
-    private static let pillMinWidth: CGFloat = 84
+    private static let pillMinWidth: CGFloat = 80
 
     // kVK_Space = 49. Carbon masks: shiftKey = 512, controlKey = 4096.
     // ONE hotkey, deliberately: ⇧⌃Space produces no text, macOS claims
