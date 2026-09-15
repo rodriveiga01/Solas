@@ -153,7 +153,7 @@ struct ParkedPillView: View {
     private var edgeWidth: CGFloat {
         switch status {
         case .thinking: return 1
-        case .ready, .failed: return 1.5
+        case .ready, .failed: return 2
         }
     }
 
@@ -163,8 +163,10 @@ struct ParkedPillView: View {
     @ViewBuilder
     private var flowOverlay: some View {
         if status == .thinking {
+            // strokeBorder draws inside the frame — no overhang clipping
+            // at the corners.
             CometRing(progress: reduceMotion ? 0.15 : slide)
-                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
         }
     }
 
@@ -189,7 +191,7 @@ struct ParkedPillView: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(edge, lineWidth: edgeWidth)
+                    .strokeBorder(edge, style: StrokeStyle(lineWidth: edgeWidth, lineCap: .round))
             )
             .overlay(flowOverlay)
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
