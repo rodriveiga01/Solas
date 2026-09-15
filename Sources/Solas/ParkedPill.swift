@@ -100,7 +100,7 @@ struct CometRing: Shape {
     /// 0→1 position of the window head along the perimeter.
     var progress: Double
     /// Window length as a fraction of the perimeter.
-    var length: Double = 0.28
+    var length: Double = 0.36
 
     var animatableData: Double {
         get { progress }
@@ -145,7 +145,7 @@ struct ParkedPillView: View {
     private var edge: Color {
         switch status {
         case .thinking: return .white.opacity(0.16)
-        case .ready: return .green.opacity(0.6)
+        case .ready: return .green // system green #34C759/#30D158 — the badge green, full strength
         case .failed: return .orange.opacity(0.45)
         }
     }
