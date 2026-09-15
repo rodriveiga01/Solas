@@ -202,7 +202,6 @@ struct ParkedPillView: View {
             .overlay(neutralEdge)
             .overlay(settledEdge)
             .overlay(flowOverlay)
-            .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 5)
             // One soft bounce on ready arrival. Static under Reduce Motion.
             .scaleEffect(arrived && !reduceMotion ? 1 : (isReady && !reduceMotion ? 0.96 : 1))
         }

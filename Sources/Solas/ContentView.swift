@@ -97,7 +97,6 @@ struct ContentView: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(cardStroke, lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.22), radius: 30, x: 0, y: 14)
         }
         .padding(20)
         .frame(width: 540)

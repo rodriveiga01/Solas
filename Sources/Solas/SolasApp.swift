@@ -290,7 +290,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         p.isMovableByWindowBackground = true
         p.isOpaque = false
         p.backgroundColor = .clear
-        p.hasShadow = false // the SwiftUI card draws its own shadow
+        // AppKit draws the shadow outside the window bounds from the
+        // opaque content shape. A SwiftUI shadow would be clipped by our
+        // transparent padding into a visible square frame.
+        p.hasShadow = true
         anchorTopCenter(p, height: 240)
         self.panel = p
     }
