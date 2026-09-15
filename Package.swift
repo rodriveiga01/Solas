@@ -8,6 +8,11 @@ let package = Package(
         .executableTarget(
             name: "Solas",
             path: "Sources/Solas"
-        )
+        ),
+        .testTarget(
+            name: "SolasTests",
+            dependencies: ["Solas"],
+            path: "Tests/SolasTests"
+        ),
     ]
 )

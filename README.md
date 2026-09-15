@@ -1,5 +1,10 @@
 # Solas
 
+![CI](https://github.com/rodriveiga01/Solas/actions/workflows/ci.yml/badge.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)
+![Swift 6](https://img.shields.io/badge/Swift-6.0-orange)
+
 Solas (Irish for "light") is a macOS menu-bar explainer card. Summon it with one keystroke, type a concept, get a concise explanation, dismiss — without leaving flow.
 
 ## How it works

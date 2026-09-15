@@ -5,7 +5,7 @@ import Foundation
 /// is Zen-only / has no paid subscription (i.e. the free model is present).
 @MainActor
 final class ModelStore: ObservableObject {
-    static let freeDefault = "opencode/muse-spark-1.3-contributor-free"
+    nonisolated static let freeDefault = "opencode/muse-spark-1.3-contributor-free"
     private static let pickKey = "Solas.didPickModel"
     private static let modelKey = "Solas.selectedModel"
     private static let introKey = "Solas.didIntroducePicker"
@@ -64,7 +64,7 @@ final class ModelStore: ObservableObject {
 
     /// Keep the picker short: the free default first, then other
     /// free / spark / zen / contributor builds, capped at 12.
-    static func curate(_ all: [String]) -> [String] {
+    nonisolated static func curate(_ all: [String]) -> [String] {
         var out: [String] = []
         if all.contains(freeDefault) { out.append(freeDefault) }
         for id in all {
@@ -78,7 +78,7 @@ final class ModelStore: ObservableObject {
     }
 
     /// "opencode/muse-spark-1.3-contributor-free" -> ("Muse Spark 1.3", "Free").
-    static func displayName(for id: String) -> String {
+    nonisolated static func displayName(for id: String) -> String {
         var short = id.split(separator: "/").last.map(String.init) ?? id
         for suffix in ["-contributor-free", "-contributor", "-free"] where short.hasSuffix(suffix) {
             short = String(short.dropLast(suffix.count))
@@ -91,7 +91,7 @@ final class ModelStore: ObservableObject {
         }.joined(separator: " ")
     }
 
-    static func isFreeTier(_ id: String) -> Bool {
+    nonisolated static func isFreeTier(_ id: String) -> Bool {
         let l = id.lowercased()
         return l.contains("free") || l.contains("contributor") || l.contains("zen")
     }
