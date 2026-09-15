@@ -25,6 +25,9 @@ struct ContentView: View {
     @State private var hoveredRow: Int?
     @State private var hoveredModel: String?
     @FocusState private var inputFocused: Bool
+    /// Shared hero identity: the card glass and the pill glass are one
+    /// entity morphing, not two surfaces crossfading.
+    @Namespace private var shellNS
 
     private var canSubmit: Bool {
         !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isLoading
@@ -44,20 +47,27 @@ struct ContentView: View {
     }
 
     var body: some View {
-        if app.isParked {
-            ParkedPillView(
-                question: app.parkedQuestion.isEmpty ? loadingQuestion : app.parkedQuestion,
-                isReady: app.parkedReady,
-                hasError: app.parkedHasError,
-                onPeek: {
-                    app.unparkToCenter(source: app.parkedReady ? "unpark-ready-click" : "peek-pill-click")
-                }
-            )
-            .frame(height: 40)
-            .transition(.opacity)
-        } else {
-            fullCard
+        Group {
+            if app.isParked {
+                ParkedPillView(
+                    question: app.parkedQuestion.isEmpty ? loadingQuestion : app.parkedQuestion,
+                    isReady: app.parkedReady,
+                    hasError: app.parkedHasError,
+                    shellNS: shellNS,
+                    onPeek: {
+                        app.unparkToCenter(source: app.parkedReady ? "unpark-ready-click" : "peek-pill-click")
+                    }
+                )
+                .frame(height: 40)
+                .transition(.opacity)
+            } else {
+                fullCard
+                    .transition(.opacity)
+            }
         }
+        // The shell morph rides a snappy spring; Reduce Motion collapses
+        // the swap to an instant cut (the panel still crossfades in AppKit).
+        .animation(reduceMotion ? nil : .snappy(duration: 0.4), value: app.isParked)
     }
 
     private var fullCard: some View {
@@ -85,7 +95,14 @@ struct ContentView: View {
                 }
                 footer()
             }
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .background {
+                // Hero glass: same entity as the pill shell — one floating
+                // plane shape-shifting, per the Liquid Glass object
+                // permanence recipe.
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.regularMaterial)
+                    .matchedGeometryEffect(id: "sol-shell", in: shellNS)
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(cardStroke, lineWidth: 1)
