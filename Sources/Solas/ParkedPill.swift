@@ -100,7 +100,7 @@ struct CometRing: Shape {
     /// 0→1 position of the window head along the perimeter.
     var progress: Double
     /// Window length as a fraction of the perimeter.
-    var length: Double = 0.14
+    var length: Double = 0.28
 
     var animatableData: Double {
         get { progress }
@@ -150,6 +150,13 @@ struct ParkedPillView: View {
         }
     }
 
+    private var edgeWidth: CGFloat {
+        switch status {
+        case .thinking: return 1
+        case .ready, .failed: return 1.5
+        }
+    }
+
     /// Flow layer: a short arc sliding at constant path speed while
     /// thinking (trim is arc-length uniform — no curve speed-up).
     /// Static arc under Reduce Motion.
@@ -182,7 +189,7 @@ struct ParkedPillView: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(edge, lineWidth: 1)
+                    .stroke(edge, lineWidth: edgeWidth)
             )
             .overlay(flowOverlay)
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
