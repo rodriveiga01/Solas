@@ -126,7 +126,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         SolasLog.log("flight to=\(NSStringFromRect(target)) response=\(response) damping=\(dampingRatio)")
         if flightTimer == nil {
             flightLastTick = Date()
-            let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in self?.flightTick() }
+            // 120Hz keeps ProMotion smooth; common modes so tracking loops
+            // don't stall the flight.
+            let t = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in self?.flightTick() }
             RunLoop.main.add(t, forMode: .common)
             flightTimer = t
         }
@@ -135,10 +137,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     private func flightTick() {
         guard let panel, var f = flight else { stopFlight(); return }
         let now = Date()
-        let dt = min(max(now.timeIntervalSince(flightLastTick), 1.0 / 240.0), 1.0 / 20.0)
+        let dt = min(max(now.timeIntervalSince(flightLastTick), 1.0 / 480.0), 1.0 / 20.0)
         flightLastTick = now
         f.step(dt: dt)
-        panel.setFrame(f.rect, display: true)
+        // Deferred display: forcing a synchronous vibrancy redraw every
+        // tick is what made the flight jank. Coalesce; paint on settle.
+        panel.setFrame(f.rect, display: false)
         flight = f
         if f.isSettled {
             panel.setFrame(f.target, display: true)
@@ -596,7 +600,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             // typing continues elsewhere while it travels.
             panel.resignKey()
             panel.orderFront(nil)
-            flyPanel(to: target, response: 0.38, dampingRatio: 1.0)
+            flyPanel(to: target, response: 0.45, dampingRatio: 1.0)
         }
         announceParked("Solas is thinking about \(ParkedPill.truncate(q))")
     }
@@ -629,7 +633,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         } else {
             panel.resignKey()
             panel.orderFront(nil)
-            flyPanel(to: target, response: 0.38, dampingRatio: 1.0)
+            flyPanel(to: target, response: 0.45, dampingRatio: 1.0)
         }
     }
 
@@ -676,7 +680,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             panel.makeKeyAndOrderFront(nil)
         } else if let target = topCenterRect(height: panel.frame.height) {
             panel.makeKeyAndOrderFront(nil)
-            flyPanel(to: target, response: 0.34, dampingRatio: 0.9)
+            flyPanel(to: target, response: 0.42, dampingRatio: 0.92)
         } else {
             panel.makeKeyAndOrderFront(nil)
         }

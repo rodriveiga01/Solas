@@ -187,7 +187,6 @@ struct ParkedPillView: View {
     let question: String
     let isReady: Bool
     let hasError: Bool
-    let shellNS: Namespace.ID
     let onPeek: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -252,14 +251,7 @@ struct ParkedPillView: View {
             }
             .padding(.horizontal, 14)
             .frame(minWidth: 80, maxWidth: 320, minHeight: 40, maxHeight: 40)
-            .background {
-                // Hero glass: same entity as the card shell (see
-                // ContentView.fullCard) — the material morphs with the
-                // flight instead of crossfading.
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(.regularMaterial)
-                    .matchedGeometryEffect(id: "sol-shell", in: shellNS)
-            }
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(neutralEdge)
             .overlay(settledEdge)
             .overlay(flowOverlay)
