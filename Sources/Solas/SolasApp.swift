@@ -320,13 +320,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         guard let panel, let hosting = panel.contentView as? FitHostingView,
               panel.isVisible else { return }
         // Parked pill hugs its word: fixed height, measured width, right
-        // edge pinned top-right on the park screen.
+        // edge pinned top-right on the park screen. Hands off while the
+        // park morph is flying — re-issuing setFrame per layout pass
+        // restarts the animation and pins the pill at center.
         if isParked {
+            if Date().timeIntervalSince(lastParkToggle) < 0.5 { return }
             guard pillScreen() != nil else { return }
             let w = ParkedPill.pillWidth(for: parkedQuestion)
             let target = pillFrame(on: pillScreen(), width: w)
             if abs(panel.frame.width - target.width) < 1,
                abs(panel.frame.height - target.height) < 1 { return }
+            SolasLog.log("park-fit frame=\(NSStringFromRect(panel.frame)) target=\(NSStringFromRect(target))")
             panel.animator().setFrame(target, display: true)
             return
         }
@@ -514,8 +518,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         let now = Date()
         if now.timeIntervalSince(lastParkToggle) < 0.25, source != "park" { return }
         lastParkToggle = now
-        frontAtSubmit = frontID()
-        submitDate = now
+        // Re-park (toggle mid-flight) keeps the original submit clock so
+        // the 30s smart-expand budget measures the run, not the toggle.
+        if source == "park" {
+            frontAtSubmit = frontID()
+            submitDate = now
+        }
         parkScreen = NSScreen.main
         parkedQuestion = q
         isParked = true
@@ -523,6 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         parkedHasError = false
         SolasLog.log("\(source) q=\(q.prefix(60)) front=\(frontAtSubmit ?? "?")")
         let target = pillFrame(on: pillScreen(), width: ParkedPill.pillWidth(for: q))
+        SolasLog.log("park-frame from=\(NSStringFromRect(panel.frame)) to=\(NSStringFromRect(target))")
         if reduceMotionOn {
             panel.setFrame(target, display: true)
             panel.orderFront(nil)
