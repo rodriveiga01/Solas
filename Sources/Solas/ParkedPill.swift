@@ -163,10 +163,11 @@ struct ParkedPillView: View {
     @ViewBuilder
     private var flowOverlay: some View {
         if status == .thinking {
-            // strokeBorder draws inside the frame — no overhang clipping
-            // at the corners.
+            // Inset 1pt keeps the 2pt stroke's overhang off the clip
+            // bound — no more cut corners.
             CometRing(progress: reduceMotion ? 0.15 : slide)
-                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .padding(1)
         }
     }
 
@@ -191,7 +192,8 @@ struct ParkedPillView: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(edge, style: StrokeStyle(lineWidth: edgeWidth, lineCap: .round))
+                    .stroke(edge, lineWidth: edgeWidth)
+                    .padding(1)
             )
             .overlay(flowOverlay)
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
