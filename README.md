@@ -7,6 +7,8 @@
 
 Solas (Irish for "light") is a macOS menu-bar explainer card. Summon it with one keystroke, type a concept, get a concise explanation, dismiss — without leaving flow.
 
+![Solas explainer card](docs/screenshot.png)
+
 ## How it works
 
 Solas shells out to your existing [`opencode`](https://github.com/sst/opencode) binary (`opencode run`, headless), so it inherits your auth, providers, and models. No second API key.
