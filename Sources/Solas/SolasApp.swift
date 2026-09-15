@@ -100,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     private var lastParkToggle = Date.distantPast
     private static let pillHeight: CGFloat = 48
     private static let pillMaxWidth: CGFloat = 320
-    private static let pillMinWidth: CGFloat = 120
+    private static let pillMinWidth: CGFloat = 84
 
     // kVK_Space = 49. Carbon masks: shiftKey = 512, controlKey = 4096.
     // ONE hotkey, deliberately: ⇧⌃Space produces no text, macOS claims
@@ -326,7 +326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         if isParked {
             if Date().timeIntervalSince(lastParkToggle) < 0.5 { return }
             guard pillScreen() != nil else { return }
-            let w = ParkedPill.pillWidth(for: parkedQuestion)
+            let w = ParkedPill.pillWidth(for: parkedQuestion, showsIcon: parkedReady && parkedHasError)
             let target = pillFrame(on: pillScreen(), width: w)
             if abs(panel.frame.width - target.width) < 1,
                abs(panel.frame.height - target.height) < 1 { return }
@@ -530,7 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         parkedReady = false
         parkedHasError = false
         SolasLog.log("\(source) q=\(q.prefix(60)) front=\(frontAtSubmit ?? "?")")
-        let target = pillFrame(on: pillScreen(), width: ParkedPill.pillWidth(for: q))
+        let target = pillFrame(on: pillScreen(), width: ParkedPill.pillWidth(for: q, showsIcon: false))
         SolasLog.log("park-frame from=\(NSStringFromRect(panel.frame)) to=\(NSStringFromRect(target))")
         if reduceMotionOn {
             panel.setFrame(target, display: true)
@@ -569,7 +569,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         isParked = true
         parkedReady = true
         SolasLog.log("\(source) hasError=\(parkedHasError) q=\(parkedQuestion.prefix(60))")
-        let target = pillFrame(on: pillScreen(), width: ParkedPill.pillWidth(for: parkedQuestion))
+        let target = pillFrame(on: pillScreen(), width: ParkedPill.pillWidth(for: parkedQuestion, showsIcon: parkedHasError))
         if reduceMotionOn {
             panel.setFrame(target, display: true)
             panel.orderFront(nil)

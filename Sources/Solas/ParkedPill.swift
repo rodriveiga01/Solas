@@ -33,19 +33,22 @@ enum ParkedPill {
         return q.count > limit ? String(q.prefix(limit)) + "…" : q
     }
 
-    /// Adaptive pill width so the bubble hugs its word: icon + spacing +
-    /// text + padding, clamped to [minWidth, maxWidth]. The panel and the
-    /// view share this so the frame and the truncation agree.
+    /// Adaptive pill width so the bubble hugs its word: padding + optional
+    /// icon + text + padding, clamped to [minWidth, maxWidth]. Only the
+    /// error state shows an icon — thinking/ready pay no icon budget.
+    /// The panel and the view share this so the frame and the truncation
+    /// agree.
     nonisolated static func pillWidth(
         for text: String,
-        minWidth: CGFloat = 120,
+        showsIcon: Bool = false,
+        minWidth: CGFloat = 84,
         maxWidth: CGFloat = 320
     ) -> CGFloat {
         let t = truncate(text)
         let font = NSFont.systemFont(ofSize: 13, weight: .medium)
         let textW = (t as NSString).size(withAttributes: [.font: font]).width
-        // 14 padding + ~16 icon + 8 spacing + text + 14 padding.
-        let w = ceil(14 + 16 + 8 + textW + 14)
+        // 11 padding + (16 icon + 8 spacing | 0) + text + 11 padding.
+        let w = ceil(11 + (showsIcon ? 24 : 0) + textW + 11)
         return min(max(w, minWidth), maxWidth)
     }
 
@@ -187,8 +190,8 @@ struct ParkedPillView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
-            .padding(.horizontal, 14)
-            .frame(minWidth: 120, maxWidth: 320, minHeight: 48, maxHeight: 48)
+            .padding(.horizontal, 11)
+            .frame(minWidth: 84, maxWidth: 320, minHeight: 48, maxHeight: 48)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
