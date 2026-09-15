@@ -92,10 +92,38 @@ enum ParkedPill {
     }
 }
 
+/// A short arc window sliding around the pill edge. Built from trims so
+/// the speed is arc-length uniform — constant flow on straights and
+/// curves alike. Wraps seamlessly: at the loop point the window splits
+/// into head + tail across the seam.
+struct CometRing: Shape {
+    /// 0→1 position of the window head along the perimeter.
+    var progress: Double
+    /// Window length as a fraction of the perimeter.
+    var length: Double = 0.14
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let ring = RoundedRectangle(cornerRadius: 24, style: .continuous)
+        let end = progress + length
+        if end <= 1 {
+            return ring.trim(from: progress, to: end).path(in: rect)
+        }
+        // Straddles the seam: head runs to 1, tail continues from 0.
+        var p = ring.trim(from: progress, to: 1).path(in: rect)
+        p.addPath(ring.trim(from: 0, to: end - 1).path(in: rect))
+        return p
+    }
+}
+
 /// The parked pill: always the prompt text (`black holes`). While thinking,
-/// a comet arc orbits the pill's edge (modern loader, no spinner); when
-/// done the orbit settles to a check (green) or warning (orange) with a
-/// neutral edge. Width hugs the word (120–320pt); no × — dismiss via
+/// a short arc slides around the edge at constant speed (modern loader,
+/// no spinner); when done the edge settles green, or orange + warning on
+/// error. Width hugs the word (120–320pt); no × — dismiss via
 /// peek → Esc/× on the card, cancel from the expanded card.
 /// Fixed 48pt height, same material + stroke language as the card.
 /// Click = peek/expand.
@@ -106,28 +134,42 @@ struct ParkedPillView: View {
     let onPeek: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var spin = false
+    @State private var slide = 0.0
     @State private var arrived = false
 
     private var status: PillStatus { ParkedPill.status(isReady: isReady, hasError: hasError) }
 
-    private var iconColor: Color {
+    /// The edge is the signal: sliding comet while thinking, settled
+    /// green when done, settled orange + warning icon on error (errors
+    /// keep the redundant cue). No badges otherwise.
+    private var edge: Color {
         switch status {
-        case .thinking: return .secondary
-        case .ready: return .green
-        case .failed: return .orange
+        case .thinking: return .white.opacity(0.16)
+        case .ready: return .green.opacity(0.45)
+        case .failed: return .orange.opacity(0.45)
+        }
+    }
+
+    /// Flow layer: a short arc sliding at constant path speed while
+    /// thinking (trim is arc-length uniform — no curve speed-up).
+    /// Static arc under Reduce Motion.
+    @ViewBuilder
+    private var flowOverlay: some View {
+        if status == .thinking {
+            CometRing(progress: reduceMotion ? 0.15 : slide)
+                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
         }
     }
 
     var body: some View {
         Button(action: onPeek) {
             HStack(spacing: 8) {
-                // Base layer: check/warning only when finished. While
-                // thinking the orbiting edge is the signal (plus VoiceOver).
-                if status != .thinking {
+                // Errors keep their icon; ready needs none — the settled
+                // green edge says it. VoiceOver labels cover every state.
+                if status == .failed {
                     Image(systemName: ParkedPill.iconName(for: status))
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(iconColor)
+                        .foregroundStyle(.orange)
                         .accessibilityHidden(true)
                 }
                 Text(ParkedPill.truncate(question))
@@ -140,35 +182,9 @@ struct ParkedPillView: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(.white.opacity(0.16), lineWidth: 1)
+                    .stroke(edge, lineWidth: 1)
             )
-            // Orbit layer: the shape stays fixed, the gradient's angle
-            // sweeps — a comet arc circling the edge while thinking.
-            // (Rotating the view itself only works for circles; on a wide
-            // capsule it tumbles.) Static arc under Reduce Motion — meaning
-            // never rides on motion alone (icon + VoiceOver label always
-            // disambiguate).
-            .overlay {
-                if status == .thinking {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(lineWidth: 2)
-                        .fill(
-                            AngularGradient(
-                                gradient: Gradient(stops: [
-                                    .init(color: .accentColor, location: 0),
-                                    .init(color: .accentColor.opacity(0.35), location: 0.18),
-                                    .init(color: .clear, location: 0.42),
-                                ]),
-                                center: .center,
-                                angle: .degrees(spin ? 360 : 0)
-                            )
-                        )
-                        .animation(
-                            reduceMotion ? nil : .linear(duration: 1.2).repeatForever(autoreverses: false),
-                            value: spin
-                        )
-                }
-            }
+            .overlay(flowOverlay)
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
             // One soft bounce on ready arrival. Static under Reduce Motion.
             .scaleEffect(arrived && !reduceMotion ? 1 : (isReady && !reduceMotion ? 0.96 : 1))
@@ -178,16 +194,21 @@ struct ParkedPillView: View {
         .accessibilityHint("Activates the Solas card")
         .accessibilityAddTraits(.isButton)
         .onAppear {
-            // Fresh pill each park (branch swap = new identity): kick the
-            // sweep. Removed with the overlay when the run finishes.
-            if status == .thinking, !reduceMotion { spin = true }
+            // Fresh pill each park (branch swap = new identity): start the
+            // slide. Removed with the overlay when the run finishes.
+            if status == .thinking, !reduceMotion {
+                slide = 0
+                withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false)) {
+                    slide = 1
+                }
+            }
             if isReady, !reduceMotion {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
                     arrived = true
                 }
             }
         }
-        .onDisappear { spin = false }
+        .onDisappear { slide = 0 }
         .onChange(of: isReady) { _, ready in
             if ready, !reduceMotion {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
