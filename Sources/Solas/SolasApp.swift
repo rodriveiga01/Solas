@@ -82,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
 
     // MARK: Parked pill — morphing bubble near menu bar (plan A)
 
-    /// True while the card is shrunk to the 280×48 pill top-right.
+    /// True while the card is shrunk to the adaptive pill top-right.
     @Published var isParked = false
     /// True once the run finished but the user hasn't peeked yet.
     @Published var parkedReady = false
@@ -98,8 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     private var submitDate = Date.distantPast
     private var parkScreen: NSScreen?
     private var lastParkToggle = Date.distantPast
-    private static let pillWidth: CGFloat = 280
     private static let pillHeight: CGFloat = 48
+    private static let pillMaxWidth: CGFloat = 320
+    private static let pillMinWidth: CGFloat = 120
 
     // kVK_Space = 49. Carbon masks: shiftKey = 512, controlKey = 4096.
     // ONE hotkey, deliberately: ⇧⌃Space produces no text, macOS claims
@@ -317,9 +318,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     private var lastFitTarget: CGFloat = -1
     @objc func fitPanelToFittingSize() {
         guard let panel, let hosting = panel.contentView as? FitHostingView,
-              let screen = NSScreen.main, panel.isVisible else { return }
-        // Parked pill has a fixed 280×48 frame — never refit while parked.
-        if isParked { return }
+              panel.isVisible else { return }
+        // Parked pill hugs its word: fixed height, measured width, right
+        // edge pinned top-right on the park screen.
+        if isParked {
+            guard pillScreen() != nil else { return }
+            let w = ParkedPill.pillWidth(for: parkedQuestion)
+            let target = pillFrame(on: pillScreen(), width: w)
+            if abs(panel.frame.width - target.width) < 1,
+               abs(panel.frame.height - target.height) < 1 { return }
+            panel.animator().setFrame(target, display: true)
+            return
+        }
+        guard let screen = NSScreen.main else { return }
         let ideal = hosting.fittingSize.height
         guard ideal > 0 else { return }
         let vf = screen.visibleFrame
@@ -480,18 +491,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         return NSScreen.main
     }
 
-    private func pillFrame(on screen: NSScreen?) -> NSRect {
+    private func pillFrame(on screen: NSScreen?, width: CGFloat) -> NSRect {
+        let w = min(max(width, Self.pillMinWidth), Self.pillMaxWidth)
         guard let screen else {
-            let w = Self.pillWidth, h = Self.pillHeight
-            return NSRect(x: 0, y: 0, width: w, height: h)
+            return NSRect(x: 0, y: 0, width: w, height: Self.pillHeight)
         }
         let vf = screen.visibleFrame
-        let w = min(Self.pillWidth, vf.width - 40)
+        let cw = min(w, vf.width - 40)
         let h = Self.pillHeight
         // Top-right, just below the menu bar (visibleFrame excludes it).
-        let x = vf.maxX - w - 16
+        // Right edge pinned so the pill hugs its word as it adapts.
+        let x = vf.maxX - cw - 16
         let y = vf.maxY - h - 12
-        return NSRect(x: x, y: y, width: w, height: h)
+        return NSRect(x: x, y: y, width: cw, height: h)
     }
 
     /// Shrink the centered card into the top-right pill. Same panel, same
@@ -510,7 +522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         parkedReady = false
         parkedHasError = false
         SolasLog.log("\(source) q=\(q.prefix(60)) front=\(frontAtSubmit ?? "?")")
-        let target = pillFrame(on: pillScreen())
+        let target = pillFrame(on: pillScreen(), width: ParkedPill.pillWidth(for: q))
         if reduceMotionOn {
             panel.setFrame(target, display: true)
             panel.orderFront(nil)
@@ -548,7 +560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         isParked = true
         parkedReady = true
         SolasLog.log("\(source) hasError=\(parkedHasError) q=\(parkedQuestion.prefix(60))")
-        let target = pillFrame(on: pillScreen())
+        let target = pillFrame(on: pillScreen(), width: ParkedPill.pillWidth(for: parkedQuestion))
         if reduceMotionOn {
             panel.setFrame(target, display: true)
             panel.orderFront(nil)

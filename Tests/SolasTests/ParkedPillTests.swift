@@ -90,13 +90,24 @@ final class ParkedPillTests: XCTestCase {
         XCTAssertEqual(ParkedPill.status(isReady: true, hasError: true), .failed)
     }
 
-    func testIconNamesAreSystemSymbolsNeverEmoji() {
-        for s in [PillStatus.thinking, .ready, .failed] {
+    func testIconNamesAreSystemSymbolsNeverEmoji() {        for s in [PillStatus.thinking, .ready, .failed] {
             let name = ParkedPill.iconName(for: s)
             XCTAssertFalse(name.isEmpty)
             // SF Symbols contain dots/dashes only — no emoji scalar range.
             XCTAssertTrue(name.allSatisfy { $0.isLetter || $0 == "." || $0 == "-" || $0 == "2" })
         }
         XCTAssertNotEqual(ParkedPill.iconName(for: .ready), ParkedPill.iconName(for: .failed))
+    }
+
+    func testPillWidthHugsShortWords() {
+        let narrow = ParkedPill.pillWidth(for: "hi")
+        let wide = ParkedPill.pillWidth(for: "black holes")
+        XCTAssertLessThan(narrow, wide)
+        XCTAssertGreaterThanOrEqual(narrow, 120)
+    }
+
+    func testPillWidthClamps() {
+        XCTAssertEqual(ParkedPill.pillWidth(for: ""), 120)
+        XCTAssertEqual(ParkedPill.pillWidth(for: String(repeating: "w", count: 200)), 320)
     }
 }

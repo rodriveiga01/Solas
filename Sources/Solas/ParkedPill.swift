@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Parked-pill state machine (pure logic — unit-tested, no AppKit).
@@ -30,6 +31,22 @@ enum ParkedPill {
     nonisolated static func truncate(_ s: String, limit: Int = 42) -> String {
         let q = s.trimmingCharacters(in: .whitespacesAndNewlines)
         return q.count > limit ? String(q.prefix(limit)) + "…" : q
+    }
+
+    /// Adaptive pill width so the bubble hugs its word: icon + spacing +
+    /// text + padding, clamped to [minWidth, maxWidth]. The panel and the
+    /// view share this so the frame and the truncation agree.
+    nonisolated static func pillWidth(
+        for text: String,
+        minWidth: CGFloat = 120,
+        maxWidth: CGFloat = 320
+    ) -> CGFloat {
+        let t = truncate(text)
+        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        let textW = (t as NSString).size(withAttributes: [.font: font]).width
+        // 14 padding + ~16 icon + 8 spacing + text + 14 padding.
+        let w = ceil(14 + 16 + 8 + textW + 14)
+        return min(max(w, minWidth), maxWidth)
     }
 
     /// Maps parked state → pill status. Pure — unit-tested.
@@ -76,15 +93,15 @@ enum ParkedPill {
 }
 
 /// The parked pill: always the prompt text (`black holes`), state carried
-/// by icon + glow + motion. Fixed 280×48 capsule, same material + stroke
-/// language as the card, lighter shadow. Click = peek/expand, × = hide
-/// (cancels first while a run is in flight; question intact).
+/// by icon + a whisper of glow. Width hugs the word (120–320pt); no × —
+/// dismiss via peek → Esc/× on the card, cancel from the expanded card.
+/// Fixed 48pt height, same material + stroke language as the card.
+/// Click = peek/expand.
 struct ParkedPillView: View {
     let question: String
     let isReady: Bool
     let hasError: Bool
     let onPeek: () -> Void
-    let onCancel: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
@@ -92,11 +109,16 @@ struct ParkedPillView: View {
 
     private var status: PillStatus { ParkedPill.status(isReady: isReady, hasError: hasError) }
 
-    /// Magic-layer glow: accent-blue while thinking, green when done,
-    /// orange on error. Confirms what the icon already says.
-    private var glow: Color {
+    /// One color cue per state, never doubled: thinking breathes accent,
+    /// done/failed rest on the neutral card stroke — the icon alone
+    /// carries ready/failed color.
+    private var edge: Color {
+        status == .thinking ? .accentColor : .white.opacity(0.16)
+    }
+
+    private var iconColor: Color {
         switch status {
-        case .thinking: return .accentColor
+        case .thinking: return .secondary
         case .ready: return .green
         case .failed: return .orange
         }
@@ -114,36 +136,25 @@ struct ParkedPillView: View {
                 } else {
                     Image(systemName: ParkedPill.iconName(for: status))
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(glow)
+                        .foregroundStyle(iconColor)
                         .accessibilityHidden(true)
                 }
                 Text(ParkedPill.truncate(question))
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Button(action: onCancel) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isReady ? "Dismiss" : "Cancel")
-                .accessibilityHint(isReady ? "Hides the card. The answer stays for when you come back." : "Cancels the running explanation")
             }
             .padding(.horizontal, 14)
-            .frame(width: 280, height: 48)
+            .frame(minWidth: 120, maxWidth: 320, minHeight: 48, maxHeight: 48)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(glow.opacity(reduceMotion ? 0.35 : (status == .thinking ? (pulse ? 0.55 : 0.25) : 0.45)), lineWidth: 1)
+                    .stroke(edge.opacity(reduceMotion ? 0.35 : (status == .thinking ? (pulse ? 0.45 : 0.2) : 1)), lineWidth: 1)
             )
-            .shadow(color: glow.opacity(0.25).opacity(reduceMotion ? 0.4 : 1), radius: 16, x: 0, y: 6)
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
             // Magic layer: breathing pulse while thinking, one soft bounce
             // on ready arrival. Static under Reduce Motion.
-            .opacity(status == .thinking && !reduceMotion && pulse ? 0.82 : 1)
+            .opacity(status == .thinking && !reduceMotion && pulse ? 0.85 : 1)
             .scaleEffect(arrived && !reduceMotion ? 1 : (isReady && !reduceMotion ? 0.96 : 1))
         }
         .buttonStyle(.plain)

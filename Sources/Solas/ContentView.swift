@@ -51,14 +51,9 @@ struct ContentView: View {
                 hasError: app.parkedHasError,
                 onPeek: {
                     app.unparkToCenter(source: app.parkedReady ? "unpark-ready-click" : "peek-pill-click")
-                },
-                onCancel: {
-                    if isLoading { app.cancelSolas() }
-                    // × on the pill: cancel + hide, question intact.
-                    app.hidePanel()
                 }
             )
-            .frame(width: 280, height: 48)
+            .frame(height: 48)
             .transition(.opacity)
         } else {
             fullCard
