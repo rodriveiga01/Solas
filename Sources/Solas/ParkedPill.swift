@@ -202,6 +202,10 @@ struct ParkedPillView: View {
             .overlay(neutralEdge)
             .overlay(settledEdge)
             .overlay(flowOverlay)
+            // Soft drop shadow drawn in SwiftUI — lives inside the
+            // caller's transparent margin so the window edge never clips
+            // it into a hard line.
+            .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
             // One soft bounce on ready arrival. Static under Reduce Motion.
             .scaleEffect(arrived && !reduceMotion ? 1 : (isReady && !reduceMotion ? 0.96 : 1))
         }

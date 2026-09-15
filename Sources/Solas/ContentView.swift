@@ -45,7 +45,10 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if app.isParked {
+            if app.morphing {
+                ghostView
+                    .transition(.opacity)
+            } else if app.isParked {
                 ParkedPillView(
                     question: app.parkedQuestion.isEmpty ? loadingQuestion : app.parkedQuestion,
                     isReady: app.parkedReady,
@@ -55,16 +58,32 @@ struct ContentView: View {
                     }
                 )
                 .frame(height: 40)
+                // Shadow margin — matches pillShadowMargin in SolasApp so
+                // the pill shadow never touches the window edge.
+                .padding(16)
                 .transition(.opacity)
             } else {
                 fullCard
                     .transition(.opacity)
             }
         }
-        // Content crossfades on a snappy spring while the panel frame
-        // flies on its own spring in AppKit; Reduce Motion collapses the
-        // swap to an instant cut.
-        .animation(reduceMotion ? nil : .snappy(duration: 0.4), value: app.isParked)
+        // Fast fades at liftoff/landing — the panel frame carries the
+        // travel, so content swaps must be done before it moves.
+        // Reduce Motion collapses swaps to an instant cut.
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: app.morphing)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: app.isParked)
+    }
+
+    /// Textless material blob shown while the frame travels. Plain shape,
+    /// no text — nothing to reflow mid-flight, so the morph reads as one
+    /// object shrinking/growing instead of content snapping mid-move.
+    private var ghostView: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(.regularMaterial)
+            .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
+            .padding(16)
+            .frame(minWidth: 80, minHeight: 40)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var fullCard: some View {
@@ -97,8 +116,11 @@ struct ContentView: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(cardStroke, lineWidth: 1)
             )
+            // SwiftUI shadow inside the outer padding — never clipped
+            // into a square frame.
+            .shadow(color: .black.opacity(0.22), radius: 24, x: 0, y: 12)
         }
-        .padding(20)
+        .padding(36)
         .frame(width: 540)
         .onReceive(NotificationCenter.default.publisher(for: .solasReset)) { _ in reset() }
         .onReceive(NotificationCenter.default.publisher(for: .solasFocusInput)) { _ in

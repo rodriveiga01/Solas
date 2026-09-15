@@ -122,9 +122,11 @@ private struct ImageBlockView: View {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:
+                    // Same height as the loaded image: resolving must not
+                    // move the card.
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(.tertiary.opacity(0.3))
-                        .frame(height: 170)
+                        .frame(height: 190)
                         .overlay { ProgressView().controlSize(.small) }
                 case .success(let image):
                     VStack(alignment: .leading, spacing: 4) {
@@ -170,17 +172,22 @@ enum AnswerStyler {
     /// Inline Markdown → AttributedString with palette accents applied and
     /// inline code set in monospace. Base font comes from the surrounding
     /// `Text` view; only the code runs get an explicit font.
+    /// Cached by (scheme, size, source): Foundation Markdown parsing runs
+    /// once per block, not once per body evaluation.
     static func styledInline(_ s: String, baseSize: CGFloat, scheme: ColorScheme) -> AttributedString {
-        var a = AnswerParser.parseInline(s)
-        for run in a.runs {
-            if let name = run.accent, let c = AccentColors.color(name, scheme) {
-                a[run.range].foregroundColor = c
+        let key = "\(scheme == .dark ? "d" : "l")|\(baseSize)|\(s)"
+        return AnswerRenderCache.shared.styled(key: key) {
+            var a = AnswerParser.parseInline(s)
+            for run in a.runs {
+                if let name = run.accent, let c = AccentColors.color(name, scheme) {
+                    a[run.range].foregroundColor = c
+                }
+                if run.inlinePresentationIntent?.contains(.code) == true {
+                    a[run.range].font = .system(size: baseSize - 1, design: .monospaced)
+                }
             }
-            if run.inlinePresentationIntent?.contains(.code) == true {
-                a[run.range].font = .system(size: baseSize - 1, design: .monospaced)
-            }
+            return a
         }
-        return a
     }
 }
 
