@@ -145,7 +145,7 @@ struct ParkedPillView: View {
     private var edge: Color {
         switch status {
         case .thinking: return .white.opacity(0.16)
-        case .ready: return .green.opacity(0.45)
+        case .ready: return .green.opacity(0.6)
         case .failed: return .orange.opacity(0.45)
         }
     }
