@@ -5,15 +5,30 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
-    runs-on: macos-latest
+    runs-on: macos-14
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: swift-actions/setup-swift@v2
+
+      - name: Swift version (preinstalled, no toolchain download)
+        run: swift --version
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
         with:
-          swift-version: "6.0"
-      - name: Build
-        run: swift build -c release
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Build (debug)
+        run: swift build
+
       - name: Test
         run: swift test
