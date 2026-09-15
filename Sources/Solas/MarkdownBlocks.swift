@@ -17,6 +17,43 @@ struct AnswerBlock: Sendable {
     let kind: Kind
 }
 
+/// Main-thread render cache. Block splitting is cheap, but Foundation
+/// Markdown parsing (`AttributedString(markdown:)`) plus per-call compiled
+/// regexes, run per block on every body evaluation, cost real frame time —
+/// reopening the card rebuilt everything live and read as blank-then-pop.
+/// Parsing is pure, so cache it: reopen becomes a lookup, not a re-render.
+final class AnswerRenderCache: @unchecked Sendable {
+    static let shared = AnswerRenderCache()
+    private let lock = NSLock()
+    private var blocksBySource: [String: [AnswerBlock]] = [:]
+    private var styledByKey: [String: AttributedString] = [:]
+
+    func blocks(for source: String, compute: () -> [AnswerBlock]) -> [AnswerBlock] {
+        lock.lock()
+        let hit = blocksBySource[source]
+        lock.unlock()
+        if let hit { return hit }
+        let v = compute()
+        lock.lock()
+        if blocksBySource.count > 8 { blocksBySource.removeAll() }
+        blocksBySource[source] = v
+        lock.unlock()
+        return v
+    }
+
+    func styled(key: String, compute: () -> AttributedString) -> AttributedString {
+        lock.lock()
+        let hit = styledByKey[key]
+        lock.unlock()
+        if let hit { return hit }
+        let v = compute()
+        lock.lock()
+        if styledByKey.count > 300 { styledByKey.removeAll() }
+        styledByKey[key] = v
+        lock.unlock()
+        return v
+    }
+}
 /// Custom inline attribute the model can emit as `^[term](accent: 'ember')`,
 /// decoded straight out of the Markdown by Foundation. Constrained to
 /// `AccentPalette.names` at render time — unknown names are ignored.
@@ -41,7 +78,25 @@ extension AttributeDynamicLookup {
 enum AnswerParser {
     // MARK: - Block splitting (line-based, zero dependencies)
 
+    /// Compiled once: `range(of:options:.regularExpression)` recompiles the
+    /// pattern on every call — per line, per body evaluation. These are
+    /// fixed literals, so `try!` cannot fail.
+    private static let fenceCloseRe = try! NSRegularExpression(pattern: #"^```\s*$"#)
+    private static let numberedRe = try! NSRegularExpression(pattern: #"^(\d+)[.)] "#)
+    private static let imageLineRe = try! NSRegularExpression(pattern: #"^!\[([^\]]*)\]\(([^)\s]+)\)\s*$"#)
+    private static let accentRe = try! NSRegularExpression(pattern: #"\^\[[^\]]+\]\(accent:\s*'([A-Za-z]+)'\)"#)
+
+    private static func matches(_ re: NSRegularExpression, _ s: String) -> [NSTextCheckingResult] {
+        let ns = s as NSString
+        return re.matches(in: s, range: NSRange(location: 0, length: ns.length))
+    }
+
+    /// Cached: pure function of `source`, called from body on every eval.
     static func blocks(from source: String) -> [AnswerBlock] {
+        AnswerRenderCache.shared.blocks(for: source) { parseBlocks(from: source) }
+    }
+
+    private static func parseBlocks(from source: String) -> [AnswerBlock] {
         var out: [AnswerBlock] = []
         var paragraph: [String] = []
         var quote: [String] = []
@@ -65,7 +120,7 @@ enum AnswerParser {
             if let _ = code {
                 // Only a bare fence closes (CommonMark: closing fences carry
                 // no info string). A ```lang line inside is literal content.
-                if line.range(of: #"^```\s*$"#, options: .regularExpression) != nil {
+                if !matches(fenceCloseRe, line).isEmpty {
                     out.append(AnswerBlock(inlineSource: code!.joined(separator: "\n"), kind: .code(language: codeLanguage)))
                     code = nil
                     codeLanguage = nil
@@ -130,9 +185,10 @@ enum AnswerParser {
         for marker in ["- ", "* ", "+ "] where rest.hasPrefix(marker) {
             return AnswerBlock(inlineSource: String(rest.dropFirst(2)), kind: .bullet(depth: depth))
         }
-        if let m = rest.range(of: #"^(\d+)[.)] "#, options: .regularExpression) {
-            let num = Int(rest[m].trimmingCharacters(in: .init(charactersIn: ".) "))) ?? 1
-            return AnswerBlock(inlineSource: String(rest[m.upperBound...]), kind: .numbered(depth: depth, number: num))
+        if let m = matches(numberedRe, rest).first, m.numberOfRanges >= 2 {
+            let ns = rest as NSString
+            let num = Int(ns.substring(with: m.range(at: 1))) ?? 1
+            return AnswerBlock(inlineSource: String(ns.substring(from: m.range.upperBound)), kind: .numbered(depth: depth, number: num))
         }
         return nil
     }
@@ -142,10 +198,8 @@ enum AnswerParser {
     /// Only standalone `![alt](https://…)` lines become images. Anything else
     /// with `!` falls through to normal paragraph parsing.
     static func parseImageLine(_ line: String) -> (alt: String, url: URL)? {
-        guard let re = try? NSRegularExpression(pattern: #"^!\[([^\]]*)\]\(([^)\s]+)\)\s*$"#) else { return nil }
         let ns = line as NSString
-        let range = NSRange(location: 0, length: ns.length)
-        guard let m = re.firstMatch(in: line, range: range), m.numberOfRanges == 3 else { return nil }
+        guard let m = matches(imageLineRe, line).first, m.numberOfRanges == 3 else { return nil }
         let alt = ns.substring(with: m.range(at: 1))
         let urlString = ns.substring(with: m.range(at: 2))
         guard let url = URL(string: urlString), url.scheme == "https" else { return nil }
@@ -171,10 +225,9 @@ enum AnswerParser {
 
     /// Accent names in order of first appearance, constrained to the palette.
     static func accentNames(in source: String) -> [String] {
-        guard let re = try? NSRegularExpression(pattern: #"\^\[[^\]]+\]\(accent:\s*'([A-Za-z]+)'\)"#) else { return [] }
         let ns = source as NSString
         var seen: [String] = []
-        for m in re.matches(in: source, range: NSRange(location: 0, length: ns.length)) {
+        for m in matches(accentRe, source) {
             let name = ns.substring(with: m.range(at: 1)).lowercased()
             if AccentPalette.names.contains(name), !seen.contains(name) {
                 seen.append(name)
