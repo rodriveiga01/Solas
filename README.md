@@ -23,7 +23,9 @@ Solas shells out to your existing [`opencode`](https://github.com/sst/opencode) 
 
 ## Getting Started
 
-Requirements: macOS 14+, Xcode command-line tools (Swift 6), `opencode` installed and authenticated (`opencode auth login`).
+Download the latest `Solas.dmg` from [Releases](https://github.com/rodriveiga01/Solas/releases), drag Solas to Applications, and open it.
+
+Or build from source. Requirements: macOS 14+, Xcode command-line tools (Swift 6), `opencode` installed and authenticated (`opencode auth login`).
 
 ```sh
 git clone <this-repo>
