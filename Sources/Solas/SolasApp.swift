@@ -80,6 +80,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
 
     private static let panelWidth: CGFloat = 540
 
+    // MARK: Parked pill — morphing bubble near menu bar (plan A)
+
+    /// True while the card is shrunk to the 280×48 pill top-right.
+    @Published var isParked = false
+    /// True once the run finished but the user hasn't peeked yet.
+    @Published var parkedReady = false
+    /// True when the parked run finished with an error.
+    @Published var parkedHasError = false
+    /// Question shown in the pill (`✨ gravity…` / `✓ ready`).
+    @Published var parkedQuestion = ""
+    private var frontAtSubmit: String?
+    private var submitDate = Date.distantPast
+    private var parkScreen: NSScreen?
+    private var lastParkToggle = Date.distantPast
+    private static let pillWidth: CGFloat = 280
+    private static let pillHeight: CGFloat = 48
+
     // kVK_Space = 49. Carbon masks: shiftKey = 512, controlKey = 4096.
     // ONE hotkey, deliberately: ⇧⌃Space produces no text, macOS claims
     // nothing like it (unlike ⌘Space = Spotlight, ⌥Space = nbsp in
@@ -297,6 +314,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     @objc func fitPanelToFittingSize() {
         guard let panel, let hosting = panel.contentView as? FitHostingView,
               let screen = NSScreen.main, panel.isVisible else { return }
+        // Parked pill has a fixed 280×48 frame — never refit while parked.
+        if isParked { return }
         let ideal = hosting.fittingSize.height
         guard ideal > 0 else { return }
         let vf = screen.visibleFrame
@@ -324,7 +343,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         let now = Date()
         if now.timeIntervalSince(lastToggle) < 0.25 { return }
         lastToggle = now
-        SolasLog.log("toggle (visible=\(panel.isVisible) thinking=\(thinking) front=\(frontID()) secureInput=\(secureInputOn()))")
+        SolasLog.log("toggle (visible=\(panel.isVisible) thinking=\(thinking) parked=\(isParked) front=\(frontID()) secureInput=\(secureInputOn()))")
+        // Parked → peek: expand without cancelling the flight.
+        if isParked {
+            unparkToCenter(source: "peek-hotkey")
+            return
+        }
+        // Expanded mid-flight → re-park instead of hiding (toggle again).
+        if thinking, panel.isVisible, !parkedQuestion.isEmpty {
+            parkForQuestion(parkedQuestion, source: "repark-toggle")
+            return
+        }
         panel.isVisible ? hidePanel() : showPanel()
     }
 
@@ -382,6 +411,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         refreshAXTrust()
         registerHIDTap() // self-heal a tap lost to timeout/invalidation
         retryMissingHotKeys() // anything released since launch? grab it now
+        // Explicit summon while parked = peek (expand without cancel).
+        if isParked {
+            unparkToCenter(source: "peek-show")
+            if reset {
+                NotificationCenter.default.post(name: .solasReset, object: nil)
+            }
+            return
+        }
         NSApp.unhide(nil)
         anchorTopCenter(panel, height: panel.frame.height)
         if !panel.isVisible {
@@ -409,9 +446,144 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     }
 
     /// Hiding never clears — answers survive hide, switch, and reopen.
+    /// Also clears any parked state (a hidden pill is gone, not parked).
     func hidePanel() {
+        isParked = false
+        parkedReady = false
+        parkedHasError = false
         panel?.orderOut(nil)
         NSApp.hide(nil)
+    }
+
+    // MARK: Parked pill — morph center ⇄ top-right (same panel, same entity)
+
+    var reduceMotionOn: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// Submit-time screen (multi-display follows you), clamped on yank.
+    private func pillScreen() -> NSScreen? {
+        if let s = parkScreen, NSScreen.screens.contains(s) { return s }
+        return NSScreen.main
+    }
+
+    private func pillFrame(on screen: NSScreen?) -> NSRect {
+        guard let screen else {
+            let w = Self.pillWidth, h = Self.pillHeight
+            return NSRect(x: 0, y: 0, width: w, height: h)
+        }
+        let vf = screen.visibleFrame
+        let w = min(Self.pillWidth, vf.width - 40)
+        let h = Self.pillHeight
+        // Top-right, just below the menu bar (visibleFrame excludes it).
+        let x = vf.maxX - w - 16
+        let y = vf.maxY - h - 12
+        return NSRect(x: x, y: y, width: w, height: h)
+    }
+
+    /// Shrink the centered card into the top-right pill. Same panel, same
+    /// entity — resized + moved, not closed/reopened. Resigns key so the
+    /// user keeps typing elsewhere; the pill stays via hidesOnDeactivate.
+    func parkForQuestion(_ q: String, source: String = "park") {
+        guard let panel else { return }
+        let now = Date()
+        if now.timeIntervalSince(lastParkToggle) < 0.25, source != "park" { return }
+        lastParkToggle = now
+        frontAtSubmit = frontID()
+        submitDate = now
+        parkScreen = NSScreen.main
+        parkedQuestion = q
+        isParked = true
+        parkedReady = false
+        parkedHasError = false
+        SolasLog.log("\(source) q=\(q.prefix(60)) front=\(frontAtSubmit ?? "?")")
+        let target = pillFrame(on: pillScreen())
+        if reduceMotionOn {
+            panel.setFrame(target, display: true)
+            panel.orderFront(nil)
+            panel.resignKey()
+        } else {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.35
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(target, display: true)
+            } completionHandler: { [weak panel] in
+                DispatchQueue.main.async { panel?.resignKey() }
+            }
+            panel.orderFront(nil)
+        }
+        announceParked("Solas is thinking about \(ParkedPill.truncate(q))")
+    }
+
+    /// The run finished but the user moved on — stay parked with a badge.
+    func markParkedReady(hasError: Bool) {
+        parkedReady = true
+        parkedHasError = hasError
+        SolasLog.log("ready parked hasError=\(hasError) q=\(parkedQuestion.prefix(60))")
+        announceParked(hasError ? "Solas finished with an error. Activate to view." : "Solas answer ready. Activate to view.")
+    }
+
+    /// Smart-expand decision at done-time. Logs `smart:reason`.
+    func shouldAutoExpandNow() -> (expand: Bool, reason: String) {
+        let r = ParkedPill.shouldAutoExpand(
+            frontAtSubmit: frontAtSubmit,
+            frontAtDone: frontID(),
+            secureInputOn: secureInputOn(),
+            elapsed: Date().timeIntervalSince(submitDate)
+        )
+        SolasLog.log("smart:\(r.reason) expand=\(r.expand)")
+        return r
+    }
+
+    /// Grow the pill back into the centered card (auto-expand, ready click,
+    /// or peek). Re-takes key + focus — user-initiated or still-waiting only.
+    func unparkToCenter(source: String = "unpark") {
+        guard let panel else { return }
+        let now = Date()
+        if now.timeIntervalSince(lastParkToggle) < 0.25, source.hasPrefix("peek") { return }
+        lastParkToggle = now
+        isParked = false
+        parkedReady = false
+        parkedHasError = false
+        SolasLog.log("\(source) q=\(parkedQuestion.prefix(60))")
+        NSApp.unhide(nil)
+        anchorTopCenter(panel, height: panel.frame.height)
+        // Refit to the true content height on the next layout pass.
+        lastFitTarget = -1
+        if !panel.isVisible {
+            panel.alphaValue = 0
+            panel.makeKeyAndOrderFront(nil)
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = reduceMotionOn ? 0.12 : 0.32
+                panel.animator().alphaValue = 1
+            }, completionHandler: { [weak panel] in
+                DispatchQueue.main.async { panel?.alphaValue = 1 }
+            })
+        } else if reduceMotionOn {
+            panel.makeKeyAndOrderFront(nil)
+        } else {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.32
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(panel.frame, display: true)
+            } completionHandler: { [weak panel] in
+                DispatchQueue.main.async { panel?.makeKeyAndOrderFront(nil) }
+            }
+            panel.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        // Let the layout-driven fitter settle, then refit to content.
+        DispatchQueue.main.async { [weak self] in self?.fitPanelToFittingSize() }
+        NotificationCenter.default.post(name: .solasFocusInput, object: nil)
+    }
+
+    /// VoiceOver status announce — never moves focus.
+    private func announceParked(_ msg: String) {
+        guard NSWorkspace.shared.isVoiceOverEnabled, let panel else { return }
+        NSAccessibility.post(
+            element: panel,
+            notification: .announcementRequested,
+            userInfo: [.announcement: msg, .priority: NSAccessibilityPriorityLevel.high.rawValue]
+        )
+        SolasLog.log("voiceover announce: \(msg.prefix(80))")
     }
 
     // MARK: Hotkeys — tier 1 Carbon (permission-free), tier 2 Accessibility

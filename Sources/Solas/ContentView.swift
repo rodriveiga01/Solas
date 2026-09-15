@@ -44,6 +44,28 @@ struct ContentView: View {
     }
 
     var body: some View {
+        if app.isParked {
+            ParkedPillView(
+                question: app.parkedQuestion.isEmpty ? loadingQuestion : app.parkedQuestion,
+                isReady: app.parkedReady,
+                hasError: app.parkedHasError,
+                onPeek: {
+                    app.unparkToCenter(source: app.parkedReady ? "unpark-ready-click" : "peek-pill-click")
+                },
+                onCancel: {
+                    if isLoading { app.cancelSolas() }
+                    // × on the pill: cancel + hide, question intact.
+                    app.hidePanel()
+                }
+            )
+            .frame(width: 280, height: 48)
+            .transition(.opacity)
+        } else {
+            fullCard
+        }
+    }
+
+    private var fullCard: some View {
         return VStack(spacing: 0) {
             VStack(spacing: 0) {
                 inputRow
@@ -79,7 +101,9 @@ struct ContentView: View {
         .frame(width: 540)
         .onReceive(NotificationCenter.default.publisher(for: .solasReset)) { _ in reset() }
         .onReceive(NotificationCenter.default.publisher(for: .solasFocusInput)) { _ in
-            if !isLoading { inputFocused = true }
+            // Ready answers own the card — don't yank focus back to the
+            // field when expanding to a finished result.
+            if !isLoading, answer.isEmpty, errorText.isEmpty { inputFocused = true }
         }
         .onReceive(NotificationCenter.default.publisher(for: .solasShowModels)) { _ in
             if !isLoading { showModels = true; showShortcut = false }
@@ -709,7 +733,7 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Solas (card stays visible; spinner inline; answer or error lands inline)
+    // MARK: - Solas (submit parks to pill; smart-expand or ready badge on done)
 
     private func submit() {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -724,6 +748,12 @@ struct ContentView: View {
         copied = false
         app.setThinking(true)
         SolasLog.log("solas start model=\(models.selected ?? "default") q=\(q.prefix(60))")
+        // Morph center → top-right pill; resign key so typing continues
+        // elsewhere. Same panel, same entity — resized + moved.
+        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.42, dampingFraction: 0.82)) {
+            inputFocused = false
+        }
+        app.parkForQuestion(q)
         Task {
             do {
                 let chosen: String? = models.selected
@@ -740,10 +770,18 @@ struct ContentView: View {
                     NSPasteboard.general.setString(AnswerParser.plainText(from: result), forType: .string)
                     withAnimation(.easeOut(duration: 0.18)) { copied = true }
                     inputFocused = false
-                    // The run may have finished while hidden (toggled away
-                    // mid-think): reveal without reset so the result is seen
-                    // instead of orphaned-then-wiped on the next open.
-                    if !app.isPanelVisible { app.showPanel(reset: false) }
+                    if app.isParked {
+                        let decision = app.shouldAutoExpandNow()
+                        if decision.expand {
+                            app.unparkToCenter(source: "auto-expand")
+                        } else {
+                            app.markParkedReady(hasError: false)
+                        }
+                    } else if !app.isPanelVisible {
+                        // Finished while hidden with no pill: reveal without
+                        // reset so the result is seen, not orphaned.
+                        app.showPanel(reset: false)
+                    }
                     SolasLog.log("solas ok chars=\(result.count)")
                     Task {
                         try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -754,6 +792,12 @@ struct ContentView: View {
                 await MainActor.run {
                     isLoading = false
                     app.setThinking(false)
+                    // Question intact — cancelled runs keep the query.
+                    // If we cancelled from the pill's × we already hid;
+                    // otherwise unpark so the input is visible again.
+                    if app.isParked, app.isPanelVisible {
+                        app.unparkToCenter(source: "unpark-cancel")
+                    }
                     inputFocused = true
                     SolasLog.log("solas cancelled")
                 }
@@ -764,8 +808,19 @@ struct ContentView: View {
                     showModels = false
                     showShortcut = false
                     app.setThinking(false)
-                    inputFocused = true
-                    if !app.isPanelVisible { app.showPanel(reset: false) }
+                    if app.isParked {
+                        let decision = app.shouldAutoExpandNow()
+                        if decision.expand {
+                            app.unparkToCenter(source: "auto-expand-error")
+                            inputFocused = true
+                        } else {
+                            // Error parks as ⚠ — click to view Retry/Copy.
+                            app.markParkedReady(hasError: true)
+                        }
+                    } else {
+                        inputFocused = true
+                        if !app.isPanelVisible { app.showPanel(reset: false) }
+                    }
                     SolasLog.log("solas error: \(error.localizedDescription.prefix(200))")
                 }
             }
