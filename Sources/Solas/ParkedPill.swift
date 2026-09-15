@@ -45,7 +45,7 @@ enum ParkedPill {
         maxWidth: CGFloat = 320
     ) -> CGFloat {
         let t = truncate(text)
-        let font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        let font = NSFont.systemFont(ofSize: 14, weight: .regular)
         let textW = (t as NSString).size(withAttributes: [.font: font]).width
         // 14 padding + (16 icon + 8 spacing | 0) + text + 14 padding.
         let w = ceil(14 + (showsIcon ? 24 : 0) + textW + 14)
@@ -192,7 +192,7 @@ struct ParkedPillView: View {
                         .accessibilityHidden(true)
                 }
                 Text(ParkedPill.truncate(question))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14, weight: .regular))
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
