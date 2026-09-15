@@ -124,6 +124,7 @@ struct ContentView: View {
         loadingQuestion = ""
         showModels = false
         showShortcut = false
+        app.setHasUnclearedResult(false)
     }
 
     private func handleEscape() {
@@ -141,6 +142,7 @@ struct ContentView: View {
             answer = ""
             errorText = ""
             copied = false
+            app.setHasUnclearedResult(false)
             inputFocused = true
         } else {
             onClose()
@@ -747,6 +749,7 @@ struct ContentView: View {
         answer = ""
         copied = false
         app.setThinking(true)
+        app.setHasUnclearedResult(false)
         SolasLog.log("solas start model=\(models.selected ?? "default") q=\(q.prefix(60))")
         // Morph center → top-right pill; resign key so typing continues
         // elsewhere. Same panel, same entity — resized + moved.
@@ -770,6 +773,7 @@ struct ContentView: View {
                     NSPasteboard.general.setString(AnswerParser.plainText(from: result), forType: .string)
                     withAnimation(.easeOut(duration: 0.18)) { copied = true }
                     inputFocused = false
+                    app.setHasUnclearedResult(true)
                     if app.isParked {
                         let decision = app.shouldAutoExpandNow()
                         if decision.expand {
@@ -792,6 +796,7 @@ struct ContentView: View {
                 await MainActor.run {
                     isLoading = false
                     app.setThinking(false)
+                    app.setHasUnclearedResult(false)
                     // Question intact — cancelled runs keep the query.
                     // If we cancelled from the pill's × we already hid;
                     // otherwise unpark so the input is visible again.
@@ -808,6 +813,7 @@ struct ContentView: View {
                     showModels = false
                     showShortcut = false
                     app.setThinking(false)
+                    app.setHasUnclearedResult(true)
                     if app.isParked {
                         let decision = app.shouldAutoExpandNow()
                         if decision.expand {

@@ -88,8 +88,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     @Published var parkedReady = false
     /// True when the parked run finished with an error.
     @Published var parkedHasError = false
-    /// Question shown in the pill (`✨ gravity…` / `✓ ready`).
+    /// Question shown in the pill (always the prompt — state is icon+glow).
     @Published var parkedQuestion = ""
+    /// True while a finished answer/error sits uncleared in the card.
+    /// An uncleared answer keeps its home in the pill: open answer →
+    /// hotkey re-parks instead of hiding.
+    @Published var hasUnclearedResult = false
     private var frontAtSubmit: String?
     private var submitDate = Date.distantPast
     private var parkScreen: NSScreen?
@@ -354,7 +358,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             parkForQuestion(parkedQuestion, source: "repark-toggle")
             return
         }
+        // Open answer left uncleared → re-park to its pill home, not hide.
+        if panel.isVisible, !thinking, hasUnclearedResult, !parkedQuestion.isEmpty {
+            parkAsReady(source: "repark-answer-toggle")
+            return
+        }
         panel.isVisible ? hidePanel() : showPanel()
+    }
+
+    /// Tracks whether a finished answer/error sits uncleared. Set by the
+    /// card on done/clear; drives the repark-home toggle rule.
+    func setHasUnclearedResult(_ v: Bool) {
+        hasUnclearedResult = v
     }
 
     // MARK: Hotkey observability — every tier funnels through here
@@ -519,6 +534,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         parkedHasError = hasError
         SolasLog.log("ready parked hasError=\(hasError) q=\(parkedQuestion.prefix(60))")
         announceParked(hasError ? "Solas finished with an error. Activate to view." : "Solas answer ready. Activate to view.")
+    }
+
+    /// Re-park an uncleared open answer back to its pill home (hotkey on
+    /// an expanded answer). Same panel morph as parkForQuestion, but lands
+    /// in ready state — no flight, no clock reset.
+    func parkAsReady(source: String = "repark-answer") {
+        guard let panel else { return }
+        let now = Date()
+        if now.timeIntervalSince(lastParkToggle) < 0.25 { return }
+        lastParkToggle = now
+        parkScreen = NSScreen.main
+        isParked = true
+        parkedReady = true
+        SolasLog.log("\(source) hasError=\(parkedHasError) q=\(parkedQuestion.prefix(60))")
+        let target = pillFrame(on: pillScreen())
+        if reduceMotionOn {
+            panel.setFrame(target, display: true)
+            panel.orderFront(nil)
+            panel.resignKey()
+        } else {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.35
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(target, display: true)
+            } completionHandler: { [weak panel] in
+                DispatchQueue.main.async { panel?.resignKey() }
+            }
+            panel.orderFront(nil)
+        }
     }
 
     /// Smart-expand decision at done-time. Logs `smart:reason`.

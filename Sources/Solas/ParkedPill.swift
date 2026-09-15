@@ -5,12 +5,24 @@ import SwiftUI
 /// Flow: `idle → thinkingParked → auto-expand OR readyParked → expanded`
 /// - `idle`: full card centered, nothing in flight.
 /// - `thinkingParked`: pill top-right, spinner, run in flight.
-/// - `readyParked`: pill top-right, `✓ ready` badge, run done, awaiting click.
+/// - `readyParked`: pill top-right, answer waiting, click to view.
 /// - `expanded`: pill tapped / hotkey peeked → full card again.
+/// An uncleared answer keeps its home in the pill: open answer → hotkey
+/// re-parks instead of hiding; only a blank/idle card hides.
 enum ParkPhase: Equatable {
     case full
     case thinkingParked
     case readyParked(hasError: Bool)
+}
+
+/// Layered state signal. The pill text is always the prompt — state is
+/// carried by three stacked layers so no single cue is load-bearing:
+/// base icon (works for everyone), magic glow+motion (progressive
+/// enhancement, off under Reduce Motion), static tint fallback.
+enum PillStatus: Equatable {
+    case thinking
+    case ready
+    case failed
 }
 
 enum ParkedPill {
@@ -18,6 +30,22 @@ enum ParkedPill {
     nonisolated static func truncate(_ s: String, limit: Int = 42) -> String {
         let q = s.trimmingCharacters(in: .whitespacesAndNewlines)
         return q.count > limit ? String(q.prefix(limit)) + "…" : q
+    }
+
+    /// Maps parked state → pill status. Pure — unit-tested.
+    nonisolated static func status(isReady: Bool, hasError: Bool) -> PillStatus {
+        if !isReady { return .thinking }
+        return hasError ? .failed : .ready
+    }
+
+    /// SF Symbol for the base layer. Never emoji: spinner while thinking,
+    /// check when done, warning on error.
+    nonisolated static func iconName(for status: PillStatus) -> String {
+        switch status {
+        case .thinking: return "arrow.triangle.2.circlepath"
+        case .ready: return "checkmark.circle.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        }
     }
 
     /// Smart-expand decision. Auto-expand only when the user is still
@@ -47,10 +75,10 @@ enum ParkedPill {
     }
 }
 
-/// The tiny bubble: `✨ + "gravity…" + spinner + ×` while thinking,
-/// `✓ ready — click to view` (or `⚠ — click to view` on error) when done.
-/// Fixed 280×48 capsule, same material + stroke language as the card,
-/// lighter shadow. Click = peek/expand, × = cancel + hide.
+/// The parked pill: always the prompt text (`black holes`), state carried
+/// by icon + glow + motion. Fixed 280×48 capsule, same material + stroke
+/// language as the card, lighter shadow. Click = peek/expand, × = hide
+/// (cancels first while a run is in flight; question intact).
 struct ParkedPillView: View {
     let question: String
     let isReady: Bool
@@ -59,23 +87,40 @@ struct ParkedPillView: View {
     let onCancel: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var bounced = false
+    @State private var pulse = false
+    @State private var arrived = false
+
+    private var status: PillStatus { ParkedPill.status(isReady: isReady, hasError: hasError) }
+
+    /// Magic-layer glow: accent-blue while thinking, green when done,
+    /// orange on error. Confirms what the icon already says.
+    private var glow: Color {
+        switch status {
+        case .thinking: return .accentColor
+        case .ready: return .green
+        case .failed: return .orange
+        }
+    }
 
     var body: some View {
         Button(action: onPeek) {
             HStack(spacing: 8) {
-                Text(isReady ? (hasError ? "⚠" : "✓") : "✨")
-                    .font(.system(size: 13, weight: .medium))
-                    .accessibilityHidden(true)
-                Text(label)
+                // Base layer: icon, never the sole carrier alone — text +
+                // VoiceOver label always disambiguate.
+                if status == .thinking {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityHidden(true)
+                } else {
+                    Image(systemName: ParkedPill.iconName(for: status))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(glow)
+                        .accessibilityHidden(true)
+                }
+                Text(ParkedPill.truncate(question))
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if !isReady {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel("Thinking")
-                }
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .medium))
@@ -85,44 +130,49 @@ struct ParkedPillView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isReady ? "Dismiss" : "Cancel")
-                .accessibilityHint(isReady ? "Dismisses the ready notice" : "Cancels the running explanation")
+                .accessibilityHint(isReady ? "Hides the card. The answer stays for when you come back." : "Cancels the running explanation")
             }
             .padding(.horizontal, 14)
             .frame(width: 280, height: 48)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(.white.opacity(0.16), lineWidth: 1)
+                    .stroke(glow.opacity(reduceMotion ? 0.35 : (status == .thinking ? (pulse ? 0.55 : 0.25) : 0.45)), lineWidth: 1)
             )
+            .shadow(color: glow.opacity(0.25).opacity(reduceMotion ? 0.4 : 1), radius: 16, x: 0, y: 6)
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
-            .offset(x: bounced && !reduceMotion ? 0 : 0)
+            // Magic layer: breathing pulse while thinking, one soft bounce
+            // on ready arrival. Static under Reduce Motion.
+            .opacity(status == .thinking && !reduceMotion && pulse ? 0.82 : 1)
+            .scaleEffect(arrived && !reduceMotion ? 1 : (isReady && !reduceMotion ? 0.96 : 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Activates the Solas card")
         .accessibilityAddTraits(.isButton)
         .onAppear {
-            // One soft bounce when arriving in ready state — static badge
-            // change only under Reduce Motion.
-            guard isReady, !reduceMotion else { return }
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
-                bounced = true
+            guard !reduceMotion else { return }
+            if status == .thinking {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            } else if isReady {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
+                    arrived = true
+                }
             }
         }
     }
 
-    private var label: String {
-        let q = ParkedPill.truncate(question)
-        if isReady {
-            return hasError ? "⚠ — click to view" : "✓ ready — click to view"
-        }
-        return q.isEmpty ? "✨ thinking…" : "✨ \(q)…"
-    }
-
     private var accessibilityLabel: String {
-        if isReady {
-            return hasError ? "Solas finished with an error. Activate to view." : "Solas answer ready. Activate to view."
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch status {
+        case .thinking:
+            return q.isEmpty ? "Solas is thinking. Activate to peek." : "Solas is thinking about \(q). Activate to peek."
+        case .ready:
+            return "Solas answer ready for \(q). Activate to view."
+        case .failed:
+            return "Solas finished with an error for \(q). Activate to view."
         }
-        return "Solas is thinking about \(question). Activate to peek."
     }
 }

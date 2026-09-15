@@ -83,4 +83,20 @@ final class ParkedPillTests: XCTestCase {
         phase = .full
         XCTAssertEqual(phase, .full)
     }
+
+    func testStatusMapping() {
+        XCTAssertEqual(ParkedPill.status(isReady: false, hasError: false), .thinking)
+        XCTAssertEqual(ParkedPill.status(isReady: true, hasError: false), .ready)
+        XCTAssertEqual(ParkedPill.status(isReady: true, hasError: true), .failed)
+    }
+
+    func testIconNamesAreSystemSymbolsNeverEmoji() {
+        for s in [PillStatus.thinking, .ready, .failed] {
+            let name = ParkedPill.iconName(for: s)
+            XCTAssertFalse(name.isEmpty)
+            // SF Symbols contain dots/dashes only — no emoji scalar range.
+            XCTAssertTrue(name.allSatisfy { $0.isLetter || $0 == "." || $0 == "-" || $0 == "2" })
+        }
+        XCTAssertNotEqual(ParkedPill.iconName(for: .ready), ParkedPill.iconName(for: .failed))
+    }
 }
