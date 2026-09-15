@@ -106,7 +106,7 @@ struct ParkedPillView: View {
     let onPeek: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var orbit: Angle = .zero
+    @State private var spin = false
     @State private var arrived = false
 
     private var status: PillStatus { ParkedPill.status(isReady: isReady, hasError: hasError) }
@@ -142,9 +142,12 @@ struct ParkedPillView: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(.white.opacity(0.16), lineWidth: 1)
             )
-            // Orbit layer: comet arc circling the edge while thinking.
-            // Static arc under Reduce Motion — meaning never rides on
-            // motion alone (icon + VoiceOver label always disambiguate).
+            // Orbit layer: the shape stays fixed, the gradient's angle
+            // sweeps — a comet arc circling the edge while thinking.
+            // (Rotating the view itself only works for circles; on a wide
+            // capsule it tumbles.) Static arc under Reduce Motion — meaning
+            // never rides on motion alone (icon + VoiceOver label always
+            // disambiguate).
             .overlay {
                 if status == .thinking {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -156,11 +159,14 @@ struct ParkedPillView: View {
                                     .init(color: .accentColor.opacity(0.35), location: 0.18),
                                     .init(color: .clear, location: 0.42),
                                 ]),
-                                center: .center
+                                center: .center,
+                                angle: .degrees(spin ? 360 : 0)
                             )
                         )
-                        .rotationEffect(orbit)
-                        .animation(nil, value: status)
+                        .animation(
+                            reduceMotion ? nil : .linear(duration: 1.2).repeatForever(autoreverses: false),
+                            value: spin
+                        )
                 }
             }
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
@@ -171,21 +177,23 @@ struct ParkedPillView: View {
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Activates the Solas card")
         .accessibilityAddTraits(.isButton)
-        .onAppear { startOrbitIfNeeded() }
+        .onAppear {
+            // Fresh pill each park (branch swap = new identity): kick the
+            // sweep. Removed with the overlay when the run finishes.
+            if status == .thinking, !reduceMotion { spin = true }
+            if isReady, !reduceMotion {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
+                    arrived = true
+                }
+            }
+        }
+        .onDisappear { spin = false }
         .onChange(of: isReady) { _, ready in
             if ready, !reduceMotion {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
                     arrived = true
                 }
             }
-        }
-    }
-
-    private func startOrbitIfNeeded() {
-        guard status == .thinking, !reduceMotion else { return }
-        orbit = .zero
-        withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-            orbit = .degrees(360)
         }
     }
 
