@@ -102,108 +102,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     private static let pillMaxWidth: CGFloat = 320
     private static let pillMinWidth: CGFloat = 80
 
-    // MARK: Spring flight — panel morph driver (WWDC23 spring params)
-
-    /// Active spring flight, if any. While set, it owns the panel frame —
-    /// the layout fitter stands down so the two never fight.
-    /// Invariant: flight != nil ⟺ a static snapshot stands in for live
-    /// content (stopFlight always restores the live view).
-    private var flight: PanelFlight?
-    private var flightLink: CADisplayLink?
-    private var flightLastTick = Date()
-    private var flightActive: Bool { flight != nil }
-    private var liveContent: NSView?
-
-    /// Freeze live content into a static bitmap for the flight. Per-frame
-    /// cost drops to ~zero (the window server composites a still image
-    /// while the frame interpolates) — resizing live vibrancy 120×/s on
-    /// the CPU cannot stay smooth. The rep carries explicit alpha so the
-    /// rounded corners and padding stay transparent instead of baking to
-    /// an opaque grey square.
-    private func beginSnapshotFlight() {
-        guard let panel, liveContent == nil, let content = panel.contentView else { return }
-        let bounds = content.bounds
-        let scale = max(1, panel.backingScaleFactor)
-        guard !bounds.isEmpty,
-              let rep = NSBitmapImageRep(
-                bitmapDataPlanes: nil,
-                pixelsWide: Int(bounds.width * scale),
-                pixelsHigh: Int(bounds.height * scale),
-                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
-              ) else { return }
-        rep.size = bounds.size
-        content.cacheDisplay(in: bounds, to: rep)
-        let img = NSImage(size: bounds.size)
-        img.addRepresentation(rep)
-        let holder = NSImageView(frame: bounds)
-        holder.image = img
-        holder.autoresizingMask = [.width, .height]
-        liveContent = content
-        panel.contentView = holder
-        SolasLog.log("flight snapshot \(Int(bounds.width))x\(Int(bounds.height)) alpha")
-    }
-
-    private func endSnapshotFlight() {
-        guard let panel, let live = liveContent else { return }
-        live.frame = panel.contentView?.bounds ?? live.frame
-        panel.contentView = live
-        liveContent = nil
-    }
-
-    /// Fly the panel to a target rect on a spring. Retargets preserve the
-    /// live frame + velocity, so mid-flight peeks redirect smoothly.
-    private func flyPanel(to target: NSRect, response: Double, dampingRatio: Double) {
-        guard let panel else { return }
-        beginSnapshotFlight()
-        if flight == nil {
-            flight = PanelFlight(
-                rect: panel.frame, target: target,
-                vel: (0, 0, 0, 0), response: response, dampingRatio: dampingRatio
-            )
-        } else {
-            flight?.retarget(from: panel.frame, to: target, response: response, dampingRatio: dampingRatio)
-        }
-        SolasLog.log("flight to=\(NSStringFromRect(target)) response=\(response) damping=\(dampingRatio)")
-        if flightLink == nil {
-            flightLastTick = Date()
-            // Vsync-locked tick on the window's own display (ProMotion
-            // aware), fired on the main runloop — a Timer drifts off-vsync
-            // and judders.
-            let link = panel.displayLink(target: self, selector: #selector(flightDisplayLinkFired(_:)))
-            link.add(to: .main, forMode: .common)
-            flightLink = link
-        }
-    }
-
-    /// Display-link tick — already on main via the .main runloop.
-    @objc private func flightDisplayLinkFired(_ link: CADisplayLink) {
-        flightTick()
-    }
-
-    private func flightTick() {
-        guard let panel, var f = flight else { stopFlight(); return }
-        let now = Date()
-        let dt = min(max(now.timeIntervalSince(flightLastTick), 1.0 / 480.0), 1.0 / 20.0)
-        flightLastTick = now
-        f.step(dt: dt)
-        // Deferred display: the content is a still image, so per-tick
-        // cost is trivial and coalescing keeps it tear-free.
-        panel.setFrame(f.rect, display: false)
-        flight = f
-        if f.isSettled {
-            panel.setFrame(f.target, display: true)
-            stopFlight()
-        }
-    }
-
-    private func stopFlight() {
-        flightLink?.invalidate()
-        flightLink = nil
-        flight = nil
-        endSnapshotFlight()
-    }
-
     // kVK_Space = 49. Carbon masks: shiftKey = 512, controlKey = 4096.
     // ONE hotkey, deliberately: ⇧⌃Space produces no text, macOS claims
     // nothing like it (unlike ⌘Space = Spotlight, ⌥Space = nbsp in
@@ -408,8 +306,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         p.setFrame(r, display: false)
     }
 
-    /// Centered-card rect without moving anything — the spring flight
-    /// target for unpark (no snap-then-animate).
+    /// Centered-card rect without moving anything — the unpark morph
+    /// target (no snap-then-animate).
     private func topCenterRect(height: CGFloat) -> NSRect? {
         guard let screen = NSScreen.main else { return nil }
         let vf = screen.visibleFrame
@@ -428,19 +326,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     @objc func fitPanelToFittingSize() {
         guard let panel, let hosting = panel.contentView as? FitHostingView,
               panel.isVisible else { return }
-        // Parked pill hugs its word: fixed height, measured width, right
-        // edge pinned top-right on the park screen. Stands down while a
-        // spring flight owns the frame.
-        if flightActive { return }
-        if isParked {
-            let w = ParkedPill.pillWidth(for: parkedQuestion, showsIcon: parkedReady && parkedHasError)
-            let target = pillFrame(on: pillScreen(), width: w)
-            if abs(panel.frame.width - target.width) < 1,
-               abs(panel.frame.height - target.height) < 1 { return }
-            SolasLog.log("park-fit frame=\(NSStringFromRect(panel.frame)) target=\(NSStringFromRect(target))")
-            panel.animator().setFrame(target, display: true)
-            return
-        }
+        // Parked pill keeps the exact frame its park call set — the fitter
+        // never touches it mid-morph, so layout passes can't fight the
+        // animation and strand it halfway.
+        if isParked { return }
         guard let screen = NSScreen.main else { return }
         let ideal = hosting.fittingSize.height
         guard ideal > 0 else { return }
@@ -585,7 +474,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     /// Hiding never clears — answers survive hide, switch, and reopen.
     /// Also clears any parked state (a hidden pill is gone, not parked).
     func hidePanel() {
-        stopFlight() // restore live content before hiding mid-morph
         isParked = false
         parkedReady = false
         parkedHasError = false
@@ -645,11 +533,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             panel.orderFront(nil)
             panel.resignKey()
         } else {
-            // Spring flight, smooth landing — resigns key at liftoff so
+            // AppKit-composited ease morph — resigns key at liftoff so
             // typing continues elsewhere while it travels.
             panel.resignKey()
             panel.orderFront(nil)
-            flyPanel(to: target, response: 0.34, dampingRatio: 1.0)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.4
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(target, display: true)
+            }
         }
         announceParked("Solas is thinking about \(ParkedPill.truncate(q))")
     }
@@ -664,7 +556,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
 
     /// Re-park an uncleared open answer back to its pill home (hotkey on
     /// an expanded answer). Same panel morph as parkForQuestion, but lands
-    /// in ready state — no flight, no clock reset.
+    /// in ready state — no clock reset.
     func parkAsReady(source: String = "repark-answer") {
         guard let panel else { return }
         let now = Date()
@@ -682,7 +574,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         } else {
             panel.resignKey()
             panel.orderFront(nil)
-            flyPanel(to: target, response: 0.34, dampingRatio: 1.0)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.4
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(target, display: true)
+            }
         }
     }
 
@@ -699,9 +595,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
     }
 
     /// Grow the pill back into the centered card (auto-expand, ready click,
-    /// or peek). Flies the same path back on a spring with a whisper of
-    /// energy, then the fitter blooms it to content height — travel, then
-    /// settle. Re-takes key + focus — user-initiated or still-waiting only.
+    /// or peek). Travels the same path back, then the fitter blooms it to
+    /// content height — travel, then settle. Re-takes key + focus —
+    /// user-initiated or still-waiting only.
     func unparkToCenter(source: String = "unpark") {
         guard let panel else { return }
         let now = Date()
@@ -712,7 +608,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
         parkedHasError = false
         SolasLog.log("\(source) q=\(parkedQuestion.prefix(60))")
         NSApp.unhide(nil)
-        // Refit to the true content height once the flight lands.
+        // Refit to the true content height once the morph lands.
         lastFitTarget = -1
         if !panel.isVisible {
             anchorTopCenter(panel, height: panel.frame.height)
@@ -729,7 +625,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Observ
             panel.makeKeyAndOrderFront(nil)
         } else if let target = topCenterRect(height: panel.frame.height) {
             panel.makeKeyAndOrderFront(nil)
-            flyPanel(to: target, response: 0.36, dampingRatio: 0.92)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.38
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(target, display: true)
+            }
         } else {
             panel.makeKeyAndOrderFront(nil)
         }

@@ -95,59 +95,6 @@ enum ParkedPill {
     }
 }
 
-/// Spring flight for the panel frame (pure logic — unit-tested).
-/// WWDC23 "Animate with springs" simplified model: response (speed) +
-/// dampingRatio (1 settles clean, <1 carries a whisper of overshoot).
-/// Integrated per-frame; retargets keep position+velocity, so a mid-flight
-/// peek redirects instead of snapping (WWDC18 interruption rule).
-struct PanelFlight {
-    var rect: CGRect
-    var target: CGRect
-    var vel: (dx: CGFloat, dy: CGFloat, dw: CGFloat, dh: CGFloat)
-    var response: Double
-    var dampingRatio: Double
-
-    nonisolated static let settlePosition: CGFloat = 0.8
-    nonisolated static let settleVelocity: CGFloat = 60
-
-    var isSettled: Bool {
-        abs(target.minX - rect.minX) < Self.settlePosition &&
-        abs(target.minY - rect.minY) < Self.settlePosition &&
-        abs(target.width - rect.width) < Self.settlePosition &&
-        abs(target.height - rect.height) < Self.settlePosition &&
-        abs(vel.dx) < Self.settleVelocity &&
-        abs(vel.dy) < Self.settleVelocity &&
-        abs(vel.dw) < Self.settleVelocity &&
-        abs(vel.dh) < Self.settleVelocity
-    }
-
-    /// Redirect mid-flight: new destination + curve, live position and
-    /// velocity preserved — continuity, never a snap.
-    mutating func retarget(from live: CGRect, to t: CGRect, response: Double, dampingRatio: Double) {
-        rect = live
-        target = t
-        self.response = response
-        self.dampingRatio = dampingRatio
-    }
-
-    mutating func step(dt: CGFloat) {
-        let w = 2 * Double.pi / response
-        let stiff = w * w
-        let damp = 2 * dampingRatio * w
-        // Two substeps keep explicit Euler stable at 60Hz for snappy curves.
-        let h = dt / 2
-        for _ in 0..<2 {
-            vel.dx += (CGFloat(stiff) * (target.minX - rect.minX) - CGFloat(damp) * vel.dx) * h
-            vel.dy += (CGFloat(stiff) * (target.minY - rect.minY) - CGFloat(damp) * vel.dy) * h
-            vel.dw += (CGFloat(stiff) * (target.width - rect.width) - CGFloat(damp) * vel.dw) * h
-            vel.dh += (CGFloat(stiff) * (target.height - rect.height) - CGFloat(damp) * vel.dh) * h
-            rect.origin.x += vel.dx * h
-            rect.origin.y += vel.dy * h
-            rect.size.width = max(1, rect.size.width + vel.dw * h)
-            rect.size.height = max(1, rect.size.height + vel.dh * h)
-        }
-    }
-}
 /// A short arc window sliding around the pill edge. Built from trims so
 /// the speed is arc-length uniform — constant flow on straights and
 /// curves alike. Wraps seamlessly: at the loop point the window splits
